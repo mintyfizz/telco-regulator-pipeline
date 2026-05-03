@@ -39,7 +39,19 @@ Telecoms regulators worldwide manage critical national data flows — operator s
 
 ## Quick start
 
-> Setup instructions coming as the project develops. The goal is a 5-minute, three-command setup.
+```bash
+git clone https://github.com/mintyfizz/telco-regulator-pipeline.git
+cd telco-regulator-pipeline
+docker compose up -d
+```
+
+After ~2 minutes (first run downloads images), the stack is up:
+
+- PostgreSQL: `localhost:5432` (user: `telco_admin`, password: `changeme_local_only`, database: `telco_warehouse`)
+- MinIO API: `localhost:9000`
+- MinIO Console: `localhost:9001` (user: `minio_admin`, password: `changeme_local_only`)
+
+Stop the stack with `docker compose down`. Use `docker compose down -v` to also clear data.
 
 ## Project status
 
