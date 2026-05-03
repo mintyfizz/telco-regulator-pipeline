@@ -24,42 +24,75 @@ Telecoms regulators worldwide manage critical national data flows — operator s
 
 ```mermaid
 flowchart LR
-    orchestration["Orchestration<br/>Airflow DAGs"]
-    sources["Data Sources<br/>(Telco Operators + ARPCE)<br/>- Subscribers<br/>- Traffic<br/>- QoS<br/>- Revenue<br/>- Topology<br/>- Complaints<br/>- Cyber"]
-    ingestion["Ingestion Layer<br/>Python Scripts<br/>(later Airflow)"]
-    lake["MinIO (Data Lake)<br/>Bronze Layer<br/>landing / quarantine / processed"]
-    quality["Data Quality<br/>Great Expectations"]
-    processing["Processing Layer<br/>Python + SQL<br/>(later dbt)"]
-    warehouse["PostgreSQL Warehouse<br/>Bronze / Silver / Gold"]
-    analytics["Analytics Layer<br/>dbt Models<br/>Validation + Business Logic"]
-    dashboard["BI / Dashboard<br/>Metabase / Power BI"]
+    subgraph data_sources["DATA SOURCES"]
+        direction TB
+        telco["Telco Systems<br/>(Billing, Network, Finance, SOC)"]
+        complaints["ARPCE Complaints System"]
+    end
 
-    sources --> ingestion --> lake --> processing --> warehouse --> analytics --> dashboard
-    quality --> processing
-    quality --> analytics
-    orchestration --> ingestion
-    orchestration --> processing
-    orchestration --> analytics
+    subgraph ingestion_group["INGESTION"]
+        direction LR
+        airflow["Airflow"]
+        python["Python Pipelines"]
+    end
 
-    classDef orchestration fill:#f3f9ec,stroke:#111827,color:#111827
-    classDef source fill:#e4f2ff,stroke:#111827,color:#111827
-    classDef ingest fill:#e8f5e9,stroke:#111827,color:#111827
-    classDef lake fill:#fff1d6,stroke:#111827,color:#111827
-    classDef quality fill:#fde8eb,stroke:#111827,color:#111827
-    classDef process fill:#f6e6f2,stroke:#111827,color:#111827
-    classDef warehouse fill:#e0f7fa,stroke:#111827,color:#111827
-    classDef analytics fill:#fde7ee,stroke:#111827,color:#111827
-    classDef dashboard fill:#f7edf8,stroke:#111827,color:#111827
+    subgraph lake_group["DATA LAKE"]
+        direction LR
+        minio["MinIO<br/>Bronze Layer"]
+        quarantine["Quarantine"]
+    end
 
-    class orchestration orchestration
-    class sources source
-    class ingestion ingest
-    class lake lake
-    class quality quality
-    class processing process
-    class warehouse warehouse
-    class analytics analytics
-    class dashboard dashboard
+    subgraph processing_group["PROCESSING"]
+        direction LR
+        expectations["Great Expectations"]
+        dbt["dbt / SQL / Python"]
+    end
+
+    subgraph warehouse_group["WAREHOUSE"]
+        direction LR
+        postgres["PostgreSQL<br/>Silver Layer"]
+        gold["Gold Layer"]
+    end
+
+    subgraph analytics_group["ANALYTICS"]
+        direction LR
+        logic["Business Logic"]
+        dashboard["Metabase / BI"]
+    end
+
+    telco --> python
+    complaints --> python
+    airflow --> python
+    python --> minio
+    minio -- invalid data --> quarantine
+    minio --> dbt
+    expectations --> dbt
+    dbt --> postgres
+    postgres --> gold
+    gold --> logic
+    logic --> dashboard
+    airflow --> dbt
+
+    classDef source fill:#bfe8f4,stroke:#111827,color:#111827
+    classDef ingestion fill:#8eea8f,stroke:#111827,color:#111827
+    classDef lake fill:#ffa500,stroke:#111827,color:#111827
+    classDef processing fill:#d98bd3,stroke:#111827,color:#111827
+    classDef warehouse fill:#fffde7,stroke:#111827,color:#111827
+    classDef analytics fill:#f7a9b8,stroke:#111827,color:#111827
+
+    class telco,complaints source
+    class airflow,python ingestion
+    class minio,quarantine lake
+    class expectations,dbt processing
+    class postgres,gold warehouse
+    class logic,dashboard analytics
+
+    style data_sources fill:#ffffff,stroke:#b7ddea,stroke-width:1px
+    style ingestion_group fill:#ffffff,stroke:#94f49d,stroke-width:1px
+    style lake_group fill:#ffffff,stroke:#ffa500,stroke-width:1px
+    style processing_group fill:#ffffff,stroke:#f0a4ee,stroke-width:1px
+    style warehouse_group fill:#ffffff,stroke:#f4efd0,stroke-width:1px
+    style analytics_group fill:#ffffff,stroke:#ffb3bd,stroke-width:1px
 ```
 
 ## Tech stack
