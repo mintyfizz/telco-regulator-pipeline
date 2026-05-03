@@ -2,9 +2,10 @@
 
 > Open-source reference data platform for telecoms sector regulation. Demonstrates batch and streaming ingestion of operator submissions, automated data quality validation, multi-layer transformations, and self-service analytics — built on the modern open-source data stack.
 
-[![CI](https://github.com/mintyfizz/telco-regulator-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/mintyfizz/telco-regulator-pipeline/actions/workflows/ci.yml)
+[![Status: early development](https://img.shields.io/badge/status-early%20development-orange.svg)](#project-status)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Docker Compose](https://img.shields.io/badge/docker-compose-2496ED.svg)](docker-compose.yml)
 
 ## Why this exists
 
