@@ -22,7 +22,45 @@ Telecoms regulators worldwide manage critical national data flows — operator s
 
 ## Architecture
 
-> Architecture diagram coming soon — see `docs/` directory.
+```mermaid
+flowchart LR
+    orchestration["Orchestration<br/>Airflow DAGs"]
+    sources["Data Sources<br/>(Telco Operators + ARPCE)<br/>- Subscribers<br/>- Traffic<br/>- QoS<br/>- Revenue<br/>- Topology<br/>- Complaints<br/>- Cyber"]
+    ingestion["Ingestion Layer<br/>Python Scripts<br/>(later Airflow)"]
+    lake["MinIO (Data Lake)<br/>Bronze Layer<br/>landing / quarantine / processed"]
+    quality["Data Quality<br/>Great Expectations"]
+    processing["Processing Layer<br/>Python + SQL<br/>(later dbt)"]
+    warehouse["PostgreSQL Warehouse<br/>Bronze / Silver / Gold"]
+    analytics["Analytics Layer<br/>dbt Models<br/>Validation + Business Logic"]
+    dashboard["BI / Dashboard<br/>Metabase / Power BI"]
+
+    sources --> ingestion --> lake --> processing --> warehouse --> analytics --> dashboard
+    quality --> processing
+    quality --> analytics
+    orchestration --> ingestion
+    orchestration --> processing
+    orchestration --> analytics
+
+    classDef orchestration fill:#f3f9ec,stroke:#111827,color:#111827
+    classDef source fill:#e4f2ff,stroke:#111827,color:#111827
+    classDef ingest fill:#e8f5e9,stroke:#111827,color:#111827
+    classDef lake fill:#fff1d6,stroke:#111827,color:#111827
+    classDef quality fill:#fde8eb,stroke:#111827,color:#111827
+    classDef process fill:#f6e6f2,stroke:#111827,color:#111827
+    classDef warehouse fill:#e0f7fa,stroke:#111827,color:#111827
+    classDef analytics fill:#fde7ee,stroke:#111827,color:#111827
+    classDef dashboard fill:#f7edf8,stroke:#111827,color:#111827
+
+    class orchestration orchestration
+    class sources source
+    class ingestion ingest
+    class lake lake
+    class quality quality
+    class processing process
+    class warehouse warehouse
+    class analytics analytics
+    class dashboard dashboard
+```
 
 ## Tech stack
 
