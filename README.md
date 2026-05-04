@@ -23,76 +23,39 @@ Telecoms regulators worldwide manage critical national data flows — operator s
 ## Architecture
 
 ```mermaid
-flowchart LR
-    subgraph data_sources["DATA SOURCES"]
-        direction TB
-        telco["Telco Systems<br/>(Billing, Network, Finance, SOC)"]
-        complaints["ARPCE Complaints System"]
-    end
+flowchart TB
+    sources["DATA SOURCES<br/><br/>Telco Operators Systems:<br/>- Billing (Subscribers)<br/>- Network (QoS, Traffic)<br/>- Finance (Revenue)<br/>- SOC (Cybersecurity)<br/><br/>Regulator (ARPCE):<br/>- Complaints System"]
+    ingestion["INGESTION LAYER<br/>Python Pipeline<br/>- API ingestion<br/>- CSV ingestion<br/>- Synthetic generation<br/><br/>Airflow DAGs<br/>- Scheduling<br/>- Dependency management"]
+    lake["DATA LAKE (MinIO)<br/>Bronze Layer:<br/>- Raw, immutable data<br/>- Schema-on-read<br/><br/>Buckets:<br/>- landing/<br/>- quarantine/<br/>- processed/"]
+    quality["DATA QUALITY<br/>Great Expectations<br/><br/>Checks:<br/>- Schema validation<br/>- Value ranges<br/>- Cross-field consistency"]
+    processing["PROCESSING & VALIDATION<br/>Tools:<br/>- SQL / Python<br/>- dbt (future)<br/><br/>Tasks:<br/>- Cleaning<br/>- Deduplication<br/>- Type casting<br/>- Standardization"]
+    warehouse["DATA WAREHOUSE (PostgreSQL)<br/><br/>Silver Layer:<br/>- Cleaned<br/>- Structured<br/>- Trusted<br/><br/>Gold Layer:<br/>- Aggregated<br/>- Analytics-ready"]
+    intelligence["CROSS-DOMAIN INTELLIGENCE<br/><br/>- Subscribers to Traffic to Revenue<br/>- QoS to Complaints<br/>- Topology to Traffic<br/>- Cyber to Impact<br/><br/>Purpose:<br/>Detect anomalies & inconsistencies"]
+    analytics["ANALYTICS LAYER<br/><br/>- Business logic<br/>- KPI computation<br/>- Trend analysis<br/>- Anomaly detection"]
+    serving["SERVING / BI<br/><br/>Tools:<br/>- Metabase<br/>- Power BI<br/><br/>Outputs:<br/>- Dashboards<br/>- Reports<br/>- Insights"]
 
-    subgraph ingestion_group["INGESTION"]
-        direction LR
-        airflow["Airflow"]
-        python["Python Pipelines"]
-    end
+    sources --> ingestion --> lake --> processing --> warehouse --> intelligence --> analytics --> serving
+    quality --> processing
 
-    subgraph lake_group["DATA LAKE"]
-        direction LR
-        minio["MinIO<br/>Bronze Layer"]
-        quarantine["Quarantine"]
-    end
+    classDef source fill:#d8edf9,stroke:#111827,color:#111827
+    classDef ingestion fill:#d8f7e6,stroke:#111827,color:#111827
+    classDef lake fill:#fff6cf,stroke:#111827,color:#111827
+    classDef quality fill:#f9d6d3,stroke:#111827,color:#111827
+    classDef processing fill:#eadcf0,stroke:#111827,color:#111827
+    classDef warehouse fill:#d8f2e3,stroke:#111827,color:#111827
+    classDef intelligence fill:#f8cfa8,stroke:#111827,color:#111827
+    classDef analytics fill:#e8c9ee,stroke:#111827,color:#111827
+    classDef serving fill:#aee4c5,stroke:#111827,color:#111827
 
-    subgraph processing_group["PROCESSING"]
-        direction LR
-        expectations["Great Expectations"]
-        dbt["dbt / SQL / Python"]
-    end
-
-    subgraph warehouse_group["WAREHOUSE"]
-        direction LR
-        postgres["PostgreSQL<br/>Silver Layer"]
-        gold["Gold Layer"]
-    end
-
-    subgraph analytics_group["ANALYTICS"]
-        direction LR
-        logic["Business Logic"]
-        dashboard["Metabase / BI"]
-    end
-
-    telco --> python
-    complaints --> python
-    airflow --> python
-    python --> minio
-    minio -- invalid data --> quarantine
-    minio --> dbt
-    expectations --> dbt
-    dbt --> postgres
-    postgres --> gold
-    gold --> logic
-    logic --> dashboard
-    airflow --> dbt
-
-    classDef source fill:#bfe8f4,stroke:#111827,color:#111827
-    classDef ingestion fill:#8eea8f,stroke:#111827,color:#111827
-    classDef lake fill:#ffa500,stroke:#111827,color:#111827
-    classDef processing fill:#d98bd3,stroke:#111827,color:#111827
-    classDef warehouse fill:#fffde7,stroke:#111827,color:#111827
-    classDef analytics fill:#f7a9b8,stroke:#111827,color:#111827
-
-    class telco,complaints source
-    class airflow,python ingestion
-    class minio,quarantine lake
-    class expectations,dbt processing
-    class postgres,gold warehouse
-    class logic,dashboard analytics
-
-    style data_sources fill:#ffffff,stroke:#b7ddea,stroke-width:1px
-    style ingestion_group fill:#ffffff,stroke:#94f49d,stroke-width:1px
-    style lake_group fill:#ffffff,stroke:#ffa500,stroke-width:1px
-    style processing_group fill:#ffffff,stroke:#f0a4ee,stroke-width:1px
-    style warehouse_group fill:#ffffff,stroke:#f4efd0,stroke-width:1px
-    style analytics_group fill:#ffffff,stroke:#ffb3bd,stroke-width:1px
+    class sources source
+    class ingestion ingestion
+    class lake lake
+    class quality quality
+    class processing processing
+    class warehouse warehouse
+    class intelligence intelligence
+    class analytics analytics
+    class serving serving
 ```
 
 ## Tech stack
@@ -119,7 +82,7 @@ docker compose up -d
 
 After ~2 minutes (first run downloads images), the stack is up:
 
-- PostgreSQL: `localhost:5432` (user: `telco_admin`, password: `changeme_local_only`, database: `telco_warehouse`)
+- PostgreSQL: `localhost:5433` (user: `telco_admin`, password: `changeme_local_only`, database: `telco_warehouse`)
 - MinIO API: `localhost:9000`
 - MinIO Console: `localhost:9001` (user: `minio_admin`, password: `changeme_local_only`)
 
