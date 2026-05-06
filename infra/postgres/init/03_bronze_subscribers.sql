@@ -1,27 +1,42 @@
 -- ============================================================================
 -- 03_bronze_subscribers.sql
 -- Raw subscriber submissions from operators.
--- Captures source data exactly as received, with audit metadata.
+--
+-- Subscriber data is segmented along three orthogonal dimensions:
+--   1. service_category — what kind of service (mobile telephony, mobile internet, fixed)
+--   2. payment_type — prepaid or postpaid
+--   3. technology_generation — for internet only (2G, 3G, 4G, 5G)
+--
+-- A single physical subscriber can appear in multiple rows. For example a
+-- prepaid mobile customer who uses 4G data appears once as mobile_telephony
+-- and again as mobile_internet/4G. This matches how operator billing systems
+-- structure customer data.
 -- ============================================================================
 
 CREATE TABLE bronze.subscribers (
-    -- Primary key: our own UUID, generated on insert.
     bronze_id                   UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
 
-    -- Source-provided fields (captured as-is from operator submissions).
+    -- Source-provided fields.
     source_submission_id        TEXT,
     operator_id                 VARCHAR(10),
     report_period               VARCHAR(7),
     region_code                 VARCHAR(8),
-    service_type                VARCHAR(20),
+
+    -- Three-dimensional service segmentation.
+    service_category            VARCHAR(30),
+    payment_type                VARCHAR(20),
+    technology_generation       VARCHAR(10),
+
+    -- The actual measurements.
     total_subscribers           BIGINT,
     active_subscribers_30d      BIGINT,
     new_activations             BIGINT,
     churn_count                 BIGINT,
     arpu_xaf                    NUMERIC(10, 2),
+
     submitted_at                TIMESTAMPTZ,
 
-    -- Audit columns (prefix-underscored to distinguish from source data).
+    -- Audit columns.
     _source_file                TEXT            NOT NULL,
     _source_line                INTEGER         NOT NULL,
     _loaded_at                  TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -32,16 +47,23 @@ CREATE TABLE bronze.subscribers (
 CREATE INDEX idx_bronze_subscribers_operator_period
     ON bronze.subscribers (operator_id, report_period);
 
+CREATE INDEX idx_bronze_subscribers_category
+    ON bronze.subscribers (service_category, technology_generation);
+
 CREATE INDEX idx_bronze_subscribers_loaded_at
     ON bronze.subscribers (_loaded_at);
-
-CREATE INDEX idx_bronze_subscribers_source_file
-    ON bronze.subscribers (_source_file);
 
 CREATE INDEX idx_bronze_subscribers_run
     ON bronze.subscribers (_loaded_by_run_id);
 
-COMMENT ON TABLE bronze.subscribers IS 'Raw subscriber data submissions from operators. No validation, no deduplication.';
-COMMENT ON COLUMN bronze.subscribers.bronze_id IS 'Internal primary key. Independent of any operator-supplied ID.';
-COMMENT ON COLUMN bronze.subscribers.source_submission_id IS 'Operator-supplied submission ID, captured for reference. Not unique across the table.';
-COMMENT ON COLUMN bronze.subscribers._raw_payload IS 'Original record as JSONB. Preserves any source fields not explicitly mapped to columns.';
+COMMENT ON TABLE bronze.subscribers IS
+'Raw subscriber data submissions from operators. Segmented by service_category, payment_type, and (for internet) technology_generation.';
+
+COMMENT ON COLUMN bronze.subscribers.service_category IS
+'Type of service: mobile_telephony, mobile_internet, fixed_voice, fixed_broadband.';
+
+COMMENT ON COLUMN bronze.subscribers.payment_type IS
+'Billing model: prepaid (98%+ of African mobile market) or postpaid.';
+
+COMMENT ON COLUMN bronze.subscribers.technology_generation IS
+'Network generation for internet subscribers: 2G, 3G, 4G, 5G. NULL for telephony rows.';

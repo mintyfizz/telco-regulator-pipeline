@@ -1,7 +1,10 @@
 -- ============================================================================
--- 05_bronze_qos.sql
--- Raw Quality of Service submissions from operators.
--- Network availability, call quality, data throughput, coverage metrics.
+-- 07_bronze_qos.sql
+-- Raw Quality of Service submissions.
+--
+-- QoS is the most adversarial domain — operators have incentives to underreport
+-- problems. We capture the methodology of measurement so silver-layer trust
+-- scoring can weight independent measurements higher than self-reported ones.
 -- ============================================================================
 
 CREATE TABLE bronze.qos (
@@ -12,19 +15,27 @@ CREATE TABLE bronze.qos (
     report_period                       VARCHAR(7),
     region_code                         VARCHAR(8),
 
+    -- How this measurement was obtained.
+    measurement_methodology             VARCHAR(40),
+    period_type                         VARCHAR(20),
+
+    -- Network availability and call quality.
     network_availability_pct            NUMERIC(6, 3),
     call_drop_rate_pct                  NUMERIC(6, 3),
     call_setup_success_rate_pct         NUMERIC(6, 3),
 
+    -- Data performance by technology generation.
     avg_data_throughput_mbps_4g         NUMERIC(8, 3),
     avg_data_throughput_mbps_3g         NUMERIC(8, 3),
     avg_latency_ms                      INTEGER,
 
+    -- Coverage as percentage of regional population.
     population_coverage_pct_4g          NUMERIC(6, 3),
     population_coverage_pct_3g          NUMERIC(6, 3),
     population_coverage_pct_2g          NUMERIC(6, 3),
 
-    complaints_received                 INTEGER,
+    -- Customer-side signal.
+    qos_related_complaints              INTEGER,
 
     submitted_at                        TIMESTAMPTZ,
 
@@ -38,16 +49,20 @@ CREATE TABLE bronze.qos (
 CREATE INDEX idx_bronze_qos_operator_period
     ON bronze.qos (operator_id, report_period);
 
+CREATE INDEX idx_bronze_qos_methodology
+    ON bronze.qos (measurement_methodology);
+
 CREATE INDEX idx_bronze_qos_loaded_at
     ON bronze.qos (_loaded_at);
-
-CREATE INDEX idx_bronze_qos_source_file
-    ON bronze.qos (_source_file);
 
 CREATE INDEX idx_bronze_qos_run
     ON bronze.qos (_loaded_by_run_id);
 
-COMMENT ON TABLE bronze.qos IS 'Raw Quality of Service submissions. The most adversarial domain — operators have incentives to underreport problems.';
-COMMENT ON COLUMN bronze.qos.network_availability_pct IS 'Percentage uptime for the period. License-mandated KPI, typically targeted 99.5%+.';
-COMMENT ON COLUMN bronze.qos.call_drop_rate_pct IS 'Percentage of calls dropped before normal completion. Lower is better, license target typically <2%.';
-COMMENT ON COLUMN bronze.qos.avg_data_throughput_mbps_4g IS 'Average download speed on 4G. NULL for regions without 4G coverage.';
+COMMENT ON TABLE bronze.qos IS
+'Raw Quality of Service measurements. The most adversarial domain in regulator data.';
+
+COMMENT ON COLUMN bronze.qos.measurement_methodology IS
+'How this measurement was obtained: operator_self_reported (lowest trust), regulator_audit, independent_drive_test (highest trust).';
+
+COMMENT ON COLUMN bronze.qos.period_type IS
+'Granularity of measurement: monthly, weekly, daily, realtime. Defaults to monthly.';

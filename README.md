@@ -9,16 +9,36 @@
 
 ## Why this exists
 
-Telecoms regulators worldwide manage critical national data flows — operator subscriber counts, traffic, quality of service, revenue, network coverage, security incidents — but most still operate this data infrastructure with Excel and email. This project is a reference implementation of what a modern, reproducible, fully open-source regulatory data platform looks like, calibrated to a realistic emerging-market context.
+Telecoms regulators worldwide manage critical national data flows — operator subscriber counts, traffic, quality of service, revenue, network coverage, security incidents — but most still operate this data infrastructure with Excel and email. This project is a reference implementation of what a modern, reproducible, fully open-source regulatory data platform looks like, calibrated to a realistic Republic of Congo telecoms market context.
 
 ## What it does
 
-- Simulates monthly regulatory submissions from 8 fictional telecom operators across 12 administrative regions
+- Simulates monthly regulatory submissions from 7 fictional telecom operators across 15 Congolese departments
 - Ingests structured data into a medallion-architecture warehouse (bronze, silver, gold)
 - Validates incoming data against declarative quality rules
 - Transforms raw submissions into business-ready analytical models
 - Serves dashboards for sector observatories and internal regulatory analytics
 - Runs end-to-end on a single laptop via Docker Compose
+
+## Current data model
+
+The PostgreSQL warehouse currently initializes four schemas:
+
+- `bronze` — raw operator submissions with audit metadata
+- `silver` — curated reference data and future validated models
+- `gold` — future analytics-ready marts
+- `audit` — pipeline run and file ingestion tracking
+
+The current bronze layer covers six submission domains:
+
+- `bronze.subscribers` — subscriber counts segmented by service category, payment type, and technology generation
+- `bronze.traffic_voice` — voice minutes by direction and destination
+- `bronze.traffic_sms` — SMS counts by direction and destination
+- `bronze.traffic_internet` — mobile data consumption in MB by technology generation
+- `bronze.qos` — quality-of-service measurements with methodology tracking
+- `bronze.revenue` — revenue components for voice, SMS, internet, value-added services, and totals
+
+The silver reference layer seeds 7 fully fictional operators and 15 Congolese departments with 2023 population, area, density, zone, and urban-concentration flags.
 
 ## Architecture
 
@@ -95,12 +115,13 @@ Early development. Built incrementally as a learning project documenting modern 
 ## Roadmap
 
 - [x] v0.1 — Repository structure, license, initial documentation
-- [ ] v0.2 — Docker Compose stack with PostgreSQL and MinIO
-- [ ] v0.3 — Synthetic data generator
-- [ ] v0.4 — Airflow batch ingestion DAGs
-- [ ] v0.5 — Great Expectations validation
-- [ ] v0.6 — dbt staging and marts models
-- [ ] v0.7 — Metabase dashboards
+- [x] v0.2 — Docker Compose stack with PostgreSQL and MinIO
+- [x] v0.3 — Bronze schema, audit infrastructure, and reference data
+- [ ] v0.4 — Synthetic data generator
+- [ ] v0.5 — Airflow batch ingestion DAGs
+- [ ] v0.6 — Great Expectations validation
+- [ ] v0.7 — dbt staging and marts models
+- [ ] v0.8 — Metabase dashboards
 - [ ] v1.0 — Production-ready release with full documentation
 
 ## License
