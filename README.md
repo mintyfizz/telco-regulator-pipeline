@@ -108,6 +108,47 @@ After ~2 minutes (first run downloads images), the stack is up:
 
 Stop the stack with `docker compose down`. Use `docker compose down -v` to also clear data.
 
+## Synthetic data generation
+
+The data generator creates realistic monthly telecom regulatory submissions calibrated to Republic of Congo market anchors for 2020-2024.
+
+Install the project dependencies and generate the full five-year dataset:
+
+```bash
+uv sync
+uv run telco-generate --start-year 2020 --end-year 2024 --output-dir output
+```
+
+Generated files are written as CSVs under:
+
+```text
+output/<domain>/<year>/<report_period>.csv
+```
+
+The current generator produces six domains:
+
+- `subscribers`
+- `traffic_voice`
+- `traffic_sms`
+- `traffic_internet`
+- `qos`
+- `revenue`
+
+For a full 2020-2024 run, expected row counts are:
+
+| Domain | Rows |
+|---|---:|
+| `subscribers` | 14,400 |
+| `traffic_voice` | 1,800 |
+| `traffic_sms` | 1,800 |
+| `traffic_internet` | 1,800 |
+| `qos` | 1,800 |
+| `revenue` | 120 |
+
+The generated data is calibrated so late-2024 monthly outputs align with expected market anchors: roughly 6.05M mobile telephony subscribers, 3.76M mobile internet subscribers, 508M monthly outgoing voice minutes, 7.6B monthly mobile internet MB, and about 16B XAF monthly revenue.
+
+Generated output is intentionally ignored by git. The next step is uploading these local CSVs to the MinIO `landing` bucket to simulate operator submissions arriving in object storage.
+
 ## Project status
 
 Early development. Built incrementally as a learning project documenting modern data engineering practice. See the roadmap below.
@@ -117,11 +158,12 @@ Early development. Built incrementally as a learning project documenting modern 
 - [x] v0.1 — Repository structure, license, initial documentation
 - [x] v0.2 — Docker Compose stack with PostgreSQL and MinIO
 - [x] v0.3 — Bronze schema, audit infrastructure, and reference data
-- [ ] v0.4 — Synthetic data generator
-- [ ] v0.5 — Airflow batch ingestion DAGs
-- [ ] v0.6 — Great Expectations validation
-- [ ] v0.7 — dbt staging and marts models
-- [ ] v0.8 — Metabase dashboards
+- [x] v0.4 — Synthetic data generator
+- [ ] v0.5 — Upload generated CSVs to MinIO landing bucket
+- [ ] v0.6 — Airflow batch ingestion DAGs
+- [ ] v0.7 — Great Expectations validation
+- [ ] v0.8 — dbt staging and marts models
+- [ ] v0.9 — Metabase dashboards
 - [ ] v1.0 — Production-ready release with full documentation
 
 ## License
