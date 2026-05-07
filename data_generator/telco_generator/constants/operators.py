@@ -4,8 +4,9 @@ Operator profiles calibrated against ARPCE 2024 market reports.
 Market share weights drive subscriber/traffic/revenue distribution.
 Trajectory parameters shape 5-year evolution.
 
-The two mobile operators reflect the real Congolese duopoly structure
-(MTN ~62%, Airtel ~38% subscriber share) without using real names.
+The two largest operators reflect the Congolese duopoly market shape without
+using real names. Smaller licensed operators receive synthetic market-share
+weights so every operator can submit data while national totals stay fixed.
 """
 
 from dataclasses import dataclass
@@ -20,9 +21,10 @@ class OperatorProfile:
     operator_type: str  # mobile, fixed, isp
     is_state_owned: bool
 
-    # 2024 anchor values from ARPCE reports.
-    mobile_subscribers_2024: int  # 0 if not a mobile operator
-    mobile_internet_subscribers_2024: int  # 0 if not internet-capable
+    # 2024 market-share weights. The generator normalizes these weights against
+    # national totals, so adding smaller operators does not increase market size.
+    mobile_subscribers_2024: int
+    mobile_internet_subscribers_2024: int
     fixed_subscribers_2024: int  # 0 if not fixed
     isp_subscribers_2024: int  # 0 if not ISP
 
@@ -37,8 +39,10 @@ class OperatorProfile:
 
 
 # Calibrated to ARPCE 2024 reports.
-# Total mobile telephony subscribers nationally: 6.050M
-# Total mobile internet subscribers nationally: 3.757M
+# National totals remain 6.050M mobile telephony subscribers and 3.757M mobile
+# internet subscribers. The values below are allocation weights, not additive
+# totals; they preserve the large two-operator market shape while letting every
+# fictional licensed operator appear in generated submissions.
 OPERATORS: dict[str, OperatorProfile] = {
     "OPA01": OperatorProfile(
         operator_id="OPA01",
@@ -75,8 +79,8 @@ OPERATORS: dict[str, OperatorProfile] = {
         operator_name="Congo Réseau",
         operator_type="fixed",
         is_state_owned=True,
-        mobile_subscribers_2024=0,
-        mobile_internet_subscribers_2024=0,
+        mobile_subscribers_2024=60_000,
+        mobile_internet_subscribers_2024=30_000,
         fixed_subscribers_2024=85_000,
         isp_subscribers_2024=0,
         mobile_growth_rate_annual=0.0,
@@ -90,8 +94,8 @@ OPERATORS: dict[str, OperatorProfile] = {
         operator_name="Avenir Net",
         operator_type="isp",
         is_state_owned=False,
-        mobile_subscribers_2024=0,
-        mobile_internet_subscribers_2024=0,
+        mobile_subscribers_2024=45_000,
+        mobile_internet_subscribers_2024=25_000,
         fixed_subscribers_2024=0,
         isp_subscribers_2024=120_000,
         mobile_growth_rate_annual=0.0,
@@ -105,8 +109,8 @@ OPERATORS: dict[str, OperatorProfile] = {
         operator_name="Likouala Connect",
         operator_type="isp",
         is_state_owned=False,
-        mobile_subscribers_2024=0,
-        mobile_internet_subscribers_2024=0,
+        mobile_subscribers_2024=30_000,
+        mobile_internet_subscribers_2024=18_000,
         fixed_subscribers_2024=0,
         isp_subscribers_2024=75_000,
         mobile_growth_rate_annual=0.0,
@@ -120,8 +124,8 @@ OPERATORS: dict[str, OperatorProfile] = {
         operator_name="Niari Web",
         operator_type="isp",
         is_state_owned=False,
-        mobile_subscribers_2024=0,
-        mobile_internet_subscribers_2024=0,
+        mobile_subscribers_2024=20_000,
+        mobile_internet_subscribers_2024=12_000,
         fixed_subscribers_2024=0,
         isp_subscribers_2024=45_000,
         mobile_growth_rate_annual=0.0,
@@ -135,8 +139,8 @@ OPERATORS: dict[str, OperatorProfile] = {
         operator_name="Plateaux Digital",
         operator_type="isp",
         is_state_owned=False,
-        mobile_subscribers_2024=0,
-        mobile_internet_subscribers_2024=0,
+        mobile_subscribers_2024=15_000,
+        mobile_internet_subscribers_2024=8_000,
         fixed_subscribers_2024=0,
         isp_subscribers_2024=28_000,
         mobile_growth_rate_annual=0.0,
@@ -149,8 +153,21 @@ OPERATORS: dict[str, OperatorProfile] = {
 
 
 def get_mobile_operators() -> list[OperatorProfile]:
-    """Return only mobile operators."""
+    """Return legally mobile operators."""
     return [op for op in OPERATORS.values() if op.operator_type == "mobile"]
+
+
+def get_mobile_market_operators() -> list[OperatorProfile]:
+    """Return operators participating in generated mobile-market allocation."""
+    return [op for op in OPERATORS.values() if op.mobile_subscribers_2024 > 0]
+
+
+def get_mobile_internet_market_operators() -> list[OperatorProfile]:
+    """Return operators participating in generated mobile-internet allocation."""
+    return [
+        op for op in OPERATORS.values()
+        if op.mobile_internet_subscribers_2024 > 0
+    ]
 
 
 def get_internet_capable_operators() -> list[OperatorProfile]:

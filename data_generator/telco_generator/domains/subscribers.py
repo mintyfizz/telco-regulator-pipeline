@@ -19,7 +19,11 @@ from datetime import datetime
 
 import numpy as np
 
-from telco_generator.constants.operators import OPERATORS, OperatorProfile
+from telco_generator.constants.operators import (
+    OperatorProfile,
+    get_mobile_internet_market_operators,
+    get_mobile_market_operators,
+)
 from telco_generator.constants.regions import REGIONS, get_population_weights
 from telco_generator.constants.trajectories import (
     INTERNET_TECH_SHARES,
@@ -221,14 +225,15 @@ def generate_subscribers_for_period(
     national_telephony *= seasonal
     national_internet *= seasonal
 
-    mobile_ops = [op for op in OPERATORS.values() if op.operator_type == "mobile"]
+    mobile_ops = get_mobile_market_operators()
+    internet_ops = get_mobile_internet_market_operators()
 
     # Allocate national totals to mobile operators.
     telephony_per_op = _allocate_to_operators(
         int(national_telephony), mobile_ops, "mobile_subscribers_2024"
     )
     internet_per_op = _allocate_to_operators(
-        int(national_internet), mobile_ops, "mobile_internet_subscribers_2024"
+        int(national_internet), internet_ops, "mobile_internet_subscribers_2024"
     )
 
     # Tech shares for this period.
@@ -259,7 +264,9 @@ def generate_subscribers_for_period(
                 ))
                 line_counter += 1
 
-        # Internet: split by region, then by technology, then by prepaid/postpaid.
+    # Internet: split by region, then by technology, then by prepaid/postpaid.
+    for operator in internet_ops:
+        operator_id = operator.operator_id
         internet_by_region = _allocate_to_regions(internet_per_op[operator_id], rng)
         for region_code, region_total in internet_by_region.items():
             if region_total < 100:

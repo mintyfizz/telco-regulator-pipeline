@@ -96,9 +96,9 @@ def generate_qos_for_period(
     rows: list[QosRow] = []
     line_counter = 1
 
-    mobile_ops = [op for op in OPERATORS.values() if op.operator_type == "mobile"]
+    operators = list(OPERATORS.values())
 
-    for operator in mobile_ops:
+    for operator in operators:
         op_id = operator.operator_id
         quality_factor = operator.qos_quality_factor
 

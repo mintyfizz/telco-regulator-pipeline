@@ -16,7 +16,10 @@ from datetime import datetime
 
 import numpy as np
 
-from telco_generator.constants.operators import OPERATORS, OperatorProfile
+from telco_generator.constants.operators import (
+    OperatorProfile,
+    get_mobile_market_operators,
+)
 from telco_generator.constants.regions import get_population_weights
 from telco_generator.constants.trajectories import TOTAL_SMS_TRAFFIC_OUTGOING
 from telco_generator.utils.interpolation import interpolate_yearly
@@ -130,7 +133,7 @@ def generate_traffic_sms_for_period(
     )
     monthly_national = national_annual / 12 * seasonal_factor(period.month, amplitude=0.06)
 
-    mobile_ops = [op for op in OPERATORS.values() if op.operator_type == "mobile"]
+    mobile_ops = get_mobile_market_operators()
     per_operator = _allocate_to_operators(int(monthly_national), mobile_ops)
 
     for operator in mobile_ops:

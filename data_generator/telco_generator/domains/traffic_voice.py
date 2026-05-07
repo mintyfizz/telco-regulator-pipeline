@@ -7,7 +7,7 @@ Calibrated against ARPCE 2024 anchors:
 - 6.102 billion outgoing minutes nationally
 - 86.2% on-net, 13.6% off-net, 0.2% international outgoing
 - 846 million incoming minutes (98% national, 2% international)
-- MTN-equivalent (OPA01): 4.443B outgoing, OPA02: 1.658B outgoing
+- Largest two fictional operators dominate outgoing voice traffic.
 """
 
 import json
@@ -17,7 +17,10 @@ from datetime import datetime
 
 import numpy as np
 
-from telco_generator.constants.operators import OPERATORS, OperatorProfile
+from telco_generator.constants.operators import (
+    OperatorProfile,
+    get_mobile_market_operators,
+)
 from telco_generator.constants.regions import get_population_weights
 from telco_generator.constants.trajectories import TOTAL_VOICE_TRAFFIC_OUTGOING
 from telco_generator.utils.interpolation import interpolate_yearly
@@ -142,7 +145,7 @@ def generate_traffic_voice_for_period(
     )
     monthly_national = national_annual / 12 * seasonal_factor(period.month, amplitude=0.04)
 
-    mobile_ops = [op for op in OPERATORS.values() if op.operator_type == "mobile"]
+    mobile_ops = get_mobile_market_operators()
     per_operator = _allocate_to_operators(int(monthly_national), mobile_ops)
 
     for operator in mobile_ops:

@@ -6,7 +6,7 @@ Produces bronze.traffic_internet rows per (operator, period, region).
 Calibrated against ARPCE 2024 anchors:
 - 90.904 billion MB total nationally
 - 75.2% 4G, 24.4% 3G, 0.3% 2G
-- MTN-equivalent (OPA01): 54.827B MB, OPA02: 36.076B MB
+- Largest two fictional operators dominate mobile internet traffic.
 """
 
 import json
@@ -16,7 +16,10 @@ from datetime import datetime
 
 import numpy as np
 
-from telco_generator.constants.operators import OPERATORS, OperatorProfile
+from telco_generator.constants.operators import (
+    OperatorProfile,
+    get_mobile_internet_market_operators,
+)
 from telco_generator.constants.regions import get_population_weights
 from telco_generator.constants.trajectories import (
     INTERNET_TRAFFIC_SHARES,
@@ -133,10 +136,10 @@ def generate_traffic_internet_for_period(
     share_3g = interpolate_yearly_dict(INTERNET_TRAFFIC_SHARES, period.year, period.month, "3G")
     share_4g = interpolate_yearly_dict(INTERNET_TRAFFIC_SHARES, period.year, period.month, "4G")
 
-    mobile_ops = [op for op in OPERATORS.values() if op.operator_type == "mobile"]
-    per_operator = _allocate_to_operators(monthly_national, mobile_ops)
+    internet_ops = get_mobile_internet_market_operators()
+    per_operator = _allocate_to_operators(monthly_national, internet_ops)
 
-    for operator in mobile_ops:
+    for operator in internet_ops:
         op_id = operator.operator_id
         per_region = _allocate_to_regions(per_operator[op_id], rng)
 

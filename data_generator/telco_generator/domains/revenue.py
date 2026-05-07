@@ -18,7 +18,7 @@ from datetime import datetime
 
 import numpy as np
 
-from telco_generator.constants.operators import OPERATORS
+from telco_generator.constants.operators import get_mobile_internet_market_operators
 from telco_generator.constants.trajectories import (
     INTERNET_TRAFFIC_SHARES,
     TOTAL_INTERNET_REVENUE_XAF,
@@ -49,9 +49,16 @@ OTHER_RATIO = 0.02
 USF_CONTRIBUTION_RATE = 0.03  # 3% of total revenue
 
 # Approximate 2024 telephony revenue (voice + SMS) per operator.
+# Values sum to the 128.891B FCFA national anchor, so adding smaller operators
+# redistributes the same market instead of increasing total market size.
 TELEPHONY_REVENUE_2024 = {
-    "OPA01": 95_978_000_000,  # 74.5% of 128.891B
-    "OPA02": 32_912_000_000,  # 25.5% of 128.891B
+    "OPA01": 92_000_000_000,
+    "OPA02": 32_000_000_000,
+    "OPA03": 1_900_000_000,
+    "OPA04": 1_200_000_000,
+    "OPA05": 800_000_000,
+    "OPA06": 550_000_000,
+    "OPA07": 441_000_000,
 }
 
 
@@ -109,12 +116,12 @@ def generate_revenue_for_period(
     # Telephony revenue scales by year (approximate).
     year_factor = 1.0 + (period.year - 2024) * 0.02  # 2% annual change
 
-    mobile_ops = [op for op in OPERATORS.values() if op.operator_type == "mobile"]
+    operators = get_mobile_internet_market_operators()
 
     # Internet revenue per operator (by internet subscriber share).
-    total_internet_subs = sum(op.mobile_internet_subscribers_2024 for op in mobile_ops)
+    total_internet_subs = sum(op.mobile_internet_subscribers_2024 for op in operators)
 
-    for operator in mobile_ops:
+    for operator in operators:
         op_id = operator.operator_id
 
         # Internet revenue allocation.
