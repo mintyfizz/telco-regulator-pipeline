@@ -118,18 +118,26 @@ def upload(
 
     domain_list = list(domains) if domains else None
 
-    stats = upload_all(
-        output_dir=output_dir,
-        minio_config=config,
-        skip_existing=skip_existing,
-        domains=domain_list,
-    )
+    try:
+        stats = upload_all(
+            output_dir=output_dir,
+            minio_config=config,
+            skip_existing=skip_existing,
+            domains=domain_list,
+        )
+    except Exception as e:
+        raise click.ClickException(f"Upload failed before completion: {e}") from e
 
     click.echo("\nUpload complete:")
     click.echo(f"  Files uploaded: {stats.files_uploaded:,}")
     click.echo(f"  Files skipped:  {stats.files_skipped:,}")
     click.echo(f"  Files failed:   {stats.files_failed:,}")
     click.echo(f"  Total size:     {stats.bytes_uploaded / 1_000_000:.2f} MB")
+
+    if stats.files_failed:
+        raise click.ClickException(
+            f"{stats.files_failed:,} file(s) failed to upload"
+        )
 
 
 @main.command()
@@ -144,6 +152,7 @@ def verify(endpoint: str, access_key: str, secret_key: str) -> None:
         secret_key=secret_key,
     )
     client = MinioClient(config)
+    errors: list[str] = []
 
     for bucket in ("landing", "quarantine", "processed"):
         try:
@@ -170,7 +179,14 @@ def verify(endpoint: str, access_key: str, secret_key: str) -> None:
                     click.echo(f"    {domain}: {by_domain[domain]:,}")
 
         except Exception as e:
-            click.echo(f"\nBucket '{bucket}': error — {e}")
+            message = f"Bucket '{bucket}': error — {e}"
+            click.echo(f"\n{message}")
+            errors.append(message)
+
+    if errors:
+        raise click.ClickException(
+            "MinIO verification failed: " + "; ".join(errors)
+        )
 
 
 if __name__ == "__main__":

@@ -13,9 +13,10 @@ their own data).
 
 import csv
 import io
+import tempfile
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from telco_generator.uploaders.minio_client import MinioClient, MinioConfig
@@ -55,8 +56,13 @@ def _split_csv_by_operator(csv_path: Path) -> dict[str, list[dict]]:
 
     with csv_path.open("r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        for row in reader:
-            operator_id = row.get("operator_id", "UNKNOWN")
+        if reader.fieldnames is None or "operator_id" not in reader.fieldnames:
+            raise ValueError(f"{csv_path} is missing required operator_id column")
+
+        for line_number, row in enumerate(reader, start=2):
+            operator_id = (row.get("operator_id") or "").strip()
+            if not operator_id:
+                raise ValueError(f"{csv_path}:{line_number} has empty operator_id")
             rows_by_operator[operator_id].append(row)
 
     return dict(rows_by_operator)
@@ -106,9 +112,19 @@ def upload_domain_period(
     and upload one file per operator.
     """
     stats = UploadStats()
-    year, month = _parse_period_from_filename(csv_path.name)
 
-    rows_by_operator = _split_csv_by_operator(csv_path)
+    try:
+        year, month = _parse_period_from_filename(csv_path.name)
+        rows_by_operator = _split_csv_by_operator(csv_path)
+    except Exception as e:
+        logger.error(
+            "upload_file_rejected",
+            path=str(csv_path),
+            domain=domain,
+            error=str(e),
+        )
+        stats.files_failed += 1
+        return stats
 
     for operator_id, rows in rows_by_operator.items():
         if not rows:
@@ -124,18 +140,21 @@ def upload_domain_period(
         # Serialize this operator's rows to CSV bytes.
         csv_bytes = _rows_to_csv_bytes(rows)
 
-        # Write to a temporary file (boto3 upload_file expects a path).
-        # Alternative: use put_object with the bytes directly.
-        temp_path = csv_path.parent / f".tmp_{operator_id}_{csv_path.name}"
-        temp_path.write_bytes(csv_bytes)
+        temp_path: Path | None = None
 
         try:
+            # Keep temp files outside output_dir so interrupted runs cannot
+            # accidentally pick them up as operator submissions later.
+            with tempfile.NamedTemporaryFile("wb", suffix=".csv", delete=False) as tmp:
+                tmp.write(csv_bytes)
+                temp_path = Path(tmp.name)
+
             metadata = {
                 "operator-id": operator_id,
                 "domain": domain,
                 "period": f"{year:04d}-{month:02d}",
                 "row-count": str(len(rows)),
-                "generated-at": datetime.now(timezone.utc).isoformat(),
+                "generated-at": datetime.now(UTC).isoformat(),
                 "submission-type": "synthetic",
             }
 
@@ -161,7 +180,8 @@ def upload_domain_period(
             stats.files_failed += 1
         finally:
             # Clean up the temp file regardless of success/failure.
-            temp_path.unlink(missing_ok=True)
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
 
     return stats
 
@@ -195,7 +215,10 @@ def upload_all(
             continue
 
         # Walk year/month CSVs.
-        csv_files = sorted(domain_dir.rglob("*.csv"))
+        csv_files = sorted(
+            path for path in domain_dir.rglob("*.csv")
+            if not path.name.startswith(".")
+        )
         logger.info(
             "uploading_domain",
             domain=domain,

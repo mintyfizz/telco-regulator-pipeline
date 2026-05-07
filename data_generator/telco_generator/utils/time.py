@@ -3,7 +3,7 @@ Time utilities for monthly period generation.
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 
 @dataclass(frozen=True)
@@ -34,7 +34,7 @@ class ReportingPeriod:
             year, month = self.year + 1, 1
         else:
             year, month = self.year, self.month + 1
-        return datetime(year, month, day_offset, 14, 23, 11, tzinfo=timezone.utc)
+        return datetime(year, month, day_offset, 14, 23, 11, tzinfo=UTC)
 
 
 def generate_periods(start_year: int, end_year: int) -> list[ReportingPeriod]:

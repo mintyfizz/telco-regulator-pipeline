@@ -126,7 +126,11 @@ def generate_revenue_for_period(
 
         # Internet revenue allocation.
         op_internet_share = operator.mobile_internet_subscribers_2024 / total_internet_subs
-        op_monthly_internet = monthly_internet * op_internet_share * lognormal_noise(rng, sigma=0.05)
+        op_monthly_internet = (
+            monthly_internet
+            * op_internet_share
+            * lognormal_noise(rng, sigma=0.05)
+        )
 
         rev_internet_2g = int(op_monthly_internet * share_2g * lognormal_noise(rng, sigma=0.15))
         rev_internet_3g = int(op_monthly_internet * share_3g * lognormal_noise(rng, sigma=0.08))
@@ -137,19 +141,43 @@ def generate_revenue_for_period(
         monthly_telephony = annual_telephony / 12 * seasonal_factor(period.month, amplitude=0.04)
         monthly_telephony *= lognormal_noise(rng, sigma=0.05)
 
-        rev_voice_onnet = int(monthly_telephony * VOICE_OUTGOING_ONNET_RATIO * lognormal_noise(rng, sigma=0.04))
-        rev_voice_offnet = int(monthly_telephony * VOICE_OUTGOING_OFFNET_RATIO * lognormal_noise(rng, sigma=0.08))
-        rev_voice_intl_out = int(monthly_telephony * VOICE_OUTGOING_INTL_RATIO * lognormal_noise(rng, sigma=0.12))
-        rev_voice_in_nat = int(monthly_telephony * VOICE_INCOMING_NATIONAL_RATIO * lognormal_noise(rng, sigma=0.10))
-        rev_voice_in_intl = int(monthly_telephony * VOICE_INCOMING_INTL_RATIO * lognormal_noise(rng, sigma=0.15))
+        rev_voice_onnet = int(
+            monthly_telephony * VOICE_OUTGOING_ONNET_RATIO * lognormal_noise(rng, sigma=0.04)
+        )
+        rev_voice_offnet = int(
+            monthly_telephony * VOICE_OUTGOING_OFFNET_RATIO * lognormal_noise(rng, sigma=0.08)
+        )
+        rev_voice_intl_out = int(
+            monthly_telephony * VOICE_OUTGOING_INTL_RATIO * lognormal_noise(rng, sigma=0.12)
+        )
+        rev_voice_in_nat = int(
+            monthly_telephony * VOICE_INCOMING_NATIONAL_RATIO * lognormal_noise(rng, sigma=0.10)
+        )
+        rev_voice_in_intl = int(
+            monthly_telephony * VOICE_INCOMING_INTL_RATIO * lognormal_noise(rng, sigma=0.15)
+        )
 
-        rev_sms_onnet = int(monthly_telephony * SMS_OUTGOING_ONNET_RATIO * lognormal_noise(rng, sigma=0.06))
-        rev_sms_offnet = int(monthly_telephony * SMS_OUTGOING_OFFNET_RATIO * lognormal_noise(rng, sigma=0.20))
-        rev_sms_intl = int(monthly_telephony * SMS_OUTGOING_INTL_RATIO * lognormal_noise(rng, sigma=0.25))
+        rev_sms_onnet = int(
+            monthly_telephony * SMS_OUTGOING_ONNET_RATIO * lognormal_noise(rng, sigma=0.06)
+        )
+        rev_sms_offnet = int(
+            monthly_telephony * SMS_OUTGOING_OFFNET_RATIO * lognormal_noise(rng, sigma=0.20)
+        )
+        rev_sms_intl = int(
+            monthly_telephony * SMS_OUTGOING_INTL_RATIO * lognormal_noise(rng, sigma=0.25)
+        )
         rev_sms_in = int(monthly_telephony * SMS_INCOMING_RATIO * lognormal_noise(rng, sigma=0.20))
 
-        rev_vas = int((rev_voice_onnet + rev_voice_offnet + rev_sms_onnet) * VAS_RATIO * lognormal_noise(rng, sigma=0.10))
-        rev_other = int((rev_voice_onnet + rev_voice_offnet) * OTHER_RATIO * lognormal_noise(rng, sigma=0.15))
+        rev_vas = int(
+            (rev_voice_onnet + rev_voice_offnet + rev_sms_onnet)
+            * VAS_RATIO
+            * lognormal_noise(rng, sigma=0.10)
+        )
+        rev_other = int(
+            (rev_voice_onnet + rev_voice_offnet)
+            * OTHER_RATIO
+            * lognormal_noise(rng, sigma=0.15)
+        )
 
         # Total = sum of all components.
         total = (

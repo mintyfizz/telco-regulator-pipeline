@@ -14,7 +14,7 @@ Calibrated against ARPCE 2024 anchors:
 
 import json
 import uuid
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 
 import numpy as np
@@ -24,7 +24,7 @@ from telco_generator.constants.operators import (
     get_mobile_internet_market_operators,
     get_mobile_market_operators,
 )
-from telco_generator.constants.regions import REGIONS, get_population_weights
+from telco_generator.constants.regions import get_population_weights
 from telco_generator.constants.trajectories import (
     INTERNET_TECH_SHARES,
     MOBILE_INTERNET_SUBSCRIBERS_NATIONAL,
@@ -158,7 +158,10 @@ def _make_row(
     activations = int(total_subs * MONTHLY_ACTIVATION_RATE * lognormal_noise(rng, sigma=0.10))
     churn = int(total_subs * MONTHLY_CHURN_RATE * lognormal_noise(rng, sigma=0.10))
 
-    submission_id = f"SUB-{operator_id}-{period.period_str}-{region_code}-{service_category[:3].upper()}"
+    submission_id = (
+        f"SUB-{operator_id}-{period.period_str}-"
+        f"{region_code}-{service_category[:3].upper()}"
+    )
 
     raw_payload = {
         "operator_id": operator_id,
@@ -271,7 +274,11 @@ def generate_subscribers_for_period(
         for region_code, region_total in internet_by_region.items():
             if region_total < 100:
                 continue
-            for tech, share in [("2G", tech_share_2g), ("3G", tech_share_3g), ("4G", tech_share_4g)]:
+            for tech, share in [
+                ("2G", tech_share_2g),
+                ("3G", tech_share_3g),
+                ("4G", tech_share_4g),
+            ]:
                 tech_total = int(region_total * share)
                 if tech_total < 50:
                     continue

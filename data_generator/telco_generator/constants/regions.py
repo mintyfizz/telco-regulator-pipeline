@@ -35,8 +35,12 @@ REGIONS: dict[str, RegionProfile] = {
     "NKA": RegionProfile("NKA", "Nkéni-Alima", "Gamboma", 154_230, 17_406, 8.86, "North", False),
     "PLA": RegionProfile("PLA", "Plateaux", "Djambala", 129_191, 20_994, 6.15, "North", False),
     # Southeast zone — 3 departments, includes the capital
-    "DJL": RegionProfile("DJL", "Djoué-Léfini", "Odziba", 174_761, 23_560, 7.41, "Southeast", False),
-    "BZV": RegionProfile("BZV", "Brazzaville", "Brazzaville", 2_145_783, 588, 3649.29, "Southeast", True),
+    "DJL": RegionProfile(
+        "DJL", "Djoué-Léfini", "Odziba", 174_761, 23_560, 7.41, "Southeast", False
+    ),
+    "BZV": RegionProfile(
+        "BZV", "Brazzaville", "Brazzaville", 2_145_783, 588, 3649.29, "Southeast", True
+    ),
     "POO": RegionProfile("POO", "Pool", "Kinkala", 219_771, 10_395, 21.14, "Southeast", False),
     # South zone — 3 departments, agricultural belt
     "BOU": RegionProfile("BOU", "Bouenza", "Madingou", 363_850, 12_265, 29.67, "South", False),
@@ -44,7 +48,9 @@ REGIONS: dict[str, RegionProfile] = {
     "NIA": RegionProfile("NIA", "Niari", "Dolisie", 334_863, 25_942, 12.91, "South", False),
     # Southwest zone — 2 departments, includes economic capital
     "KOU": RegionProfile("KOU", "Kouilou", "Loango", 119_162, 13_103, 9.09, "Southwest", False),
-    "PNR": RegionProfile("PNR", "Pointe-Noire", "Pointe-Noire", 1_398_812, 288, 4857.00, "Southwest", True),
+    "PNR": RegionProfile(
+        "PNR", "Pointe-Noire", "Pointe-Noire", 1_398_812, 288, 4857.00, "Southwest", True
+    ),
 }
 
 

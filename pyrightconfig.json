@@ -1,0 +1,11 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "include": [
+    "data_generator"
+  ],
+  "extraPaths": [
+    "data_generator"
+  ]
+}

@@ -42,7 +42,9 @@ class OperatorProfile:
 # National totals remain 6.050M mobile telephony subscribers and 3.757M mobile
 # internet subscribers. The values below are allocation weights, not additive
 # totals; they preserve the large two-operator market shape while letting every
-# fictional licensed operator appear in generated submissions.
+# fictional licensed operator appear in generated submissions. This is a
+# synthetic reporting-participation model: license type remains separate from
+# whether an operator appears in a given generated market domain.
 OPERATORS: dict[str, OperatorProfile] = {
     "OPA01": OperatorProfile(
         operator_id="OPA01",
