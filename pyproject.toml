@@ -1,0 +1,61 @@
+[project]
+name = "telco-regulator-pipeline"
+version = "0.4.0"
+description = "Open-source reference data platform for telecoms sector regulation"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Thomas Gatse", email = "thomasgatse@outlook.com" }
+]
+dependencies = [
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "faker>=24.0.0",
+    "pydantic>=2.6.0",
+    "pyyaml>=6.0.1",
+    "click>=8.1.0",
+    "structlog>=24.1.0",
+    "boto3>=1.34.0",
+    "psycopg2-binary>=2.9.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.3.0",
+    "mypy>=1.9.0",
+    "ipython>=8.22.0",
+]
+
+[project.scripts]
+telco-generate = "telco_generator.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["data_generator/telco_generator"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "B", "UP", "ANN"]
+ignore = ["ANN101", "ANN102"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN"]
+
+[tool.pytest.ini_options]
+testpaths = ["data_generator/tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
