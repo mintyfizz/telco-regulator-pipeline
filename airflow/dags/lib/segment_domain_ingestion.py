@@ -1,10 +1,10 @@
 """
-Generic ingestion logic for mobile bronze domains after subscribers.
+Generic ingestion logic for segmented bronze domains after subscribers.
 
-This module handles the five remaining v1 mobile domains:
+This module handles the five remaining measurement domains:
 traffic_voice, traffic_sms, traffic_internet, qos, and revenue.
 Each domain has its own table/columns, but the ingestion mechanics are the
-same: discover CSVs in landing, validate structure, insert into bronze, move
+same: discover CSVs in landing, validate structure, insert into bronze, copy
 objects to processed/quarantine, and write audit records.
 """
 
@@ -18,21 +18,36 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from airflow.exceptions import AirflowException
 from psycopg2.extras import Json
 
 from lib.audit import (
+    finalized_files_for_bucket,
     finish_pipeline_run,
-    loaded_files_for_bucket,
     record_file_ingestion,
     start_pipeline_run,
 )
-from lib.minio_helpers import download_object, get_object_size, list_objects, move_object
+from lib.minio_helpers import (
+    copy_object,
+    delete_object,
+    download_object,
+    get_object_size,
+    list_objects,
+)
 from lib.postgres_helpers import get_warehouse_connection, insert_rows
 
 LANDING_BUCKET = "landing"
 PROCESSED_BUCKET = "processed"
 QUARANTINE_BUCKET = "quarantine"
-LANDING_PREFIX = "mobile/"
+LANDING_PREFIX = ""
+ALLOWED_SERVICE_SEGMENTS = {"mobile", "fixed_voice", "fixed_broadband"}
+DOMAIN_SERVICE_SEGMENTS = {
+    "traffic_voice": {"mobile", "fixed_voice"},
+    "traffic_sms": {"mobile"},
+    "traffic_internet": {"mobile", "fixed_broadband"},
+    "qos": {"mobile", "fixed_voice", "fixed_broadband"},
+    "revenue": {"mobile", "fixed_voice", "fixed_broadband"},
+}
 
 
 @dataclass(frozen=True)
@@ -93,6 +108,11 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
             "voice_minutes_outgoing_international",
             "voice_minutes_incoming_national",
             "voice_minutes_incoming_international",
+            "voice_minutes_fixed_local",
+            "voice_minutes_fixed_national",
+            "voice_minutes_fixed_international_outgoing",
+            "voice_minutes_fixed_incoming_national",
+            "voice_minutes_fixed_incoming_international",
         ],
         integer_columns={
             "voice_minutes_outgoing_onnet",
@@ -100,6 +120,11 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
             "voice_minutes_outgoing_international",
             "voice_minutes_incoming_national",
             "voice_minutes_incoming_international",
+            "voice_minutes_fixed_local",
+            "voice_minutes_fixed_national",
+            "voice_minutes_fixed_international_outgoing",
+            "voice_minutes_fixed_incoming_national",
+            "voice_minutes_fixed_incoming_international",
         },
         decimal_columns=set(),
     ),
@@ -128,6 +153,9 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
             "data_consumed_mb_3g",
             "data_consumed_mb_4g",
             "data_consumed_mb_5g",
+            "data_consumed_mb_fiber",
+            "data_consumed_mb_adsl",
+            "data_consumed_mb_fixed_wireless",
         ],
         integer_columns=set(),
         decimal_columns={
@@ -135,6 +163,9 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
             "data_consumed_mb_3g",
             "data_consumed_mb_4g",
             "data_consumed_mb_5g",
+            "data_consumed_mb_fiber",
+            "data_consumed_mb_adsl",
+            "data_consumed_mb_fixed_wireless",
         },
     ),
     "qos": DomainConfig(
@@ -153,6 +184,11 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
             "population_coverage_pct_3g",
             "population_coverage_pct_2g",
             "qos_related_complaints",
+            "avg_fixed_download_mbps",
+            "avg_fixed_upload_mbps",
+            "avg_packet_loss_pct",
+            "fixed_broadband_coverage_pct",
+            "fixed_service_repair_time_hours",
         ],
         integer_columns={
             "avg_latency_ms",
@@ -167,6 +203,11 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
             "population_coverage_pct_4g",
             "population_coverage_pct_3g",
             "population_coverage_pct_2g",
+            "avg_fixed_download_mbps",
+            "avg_fixed_upload_mbps",
+            "avg_packet_loss_pct",
+            "fixed_broadband_coverage_pct",
+            "fixed_service_repair_time_hours",
         },
     ),
     "revenue": DomainConfig(
@@ -186,6 +227,11 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
             "revenue_internet_3g_xaf",
             "revenue_internet_4g_xaf",
             "revenue_internet_5g_xaf",
+            "revenue_fixed_voice_subscription_xaf",
+            "revenue_fixed_voice_usage_xaf",
+            "revenue_fixed_broadband_subscription_xaf",
+            "revenue_fixed_broadband_usage_xaf",
+            "revenue_equipment_rental_xaf",
             "revenue_value_added_services_xaf",
             "revenue_other_xaf",
             "total_revenue_xaf",
@@ -205,6 +251,11 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
             "revenue_internet_3g_xaf",
             "revenue_internet_4g_xaf",
             "revenue_internet_5g_xaf",
+            "revenue_fixed_voice_subscription_xaf",
+            "revenue_fixed_voice_usage_xaf",
+            "revenue_fixed_broadband_subscription_xaf",
+            "revenue_fixed_broadband_usage_xaf",
+            "revenue_equipment_rental_xaf",
             "revenue_value_added_services_xaf",
             "revenue_other_xaf",
             "total_revenue_xaf",
@@ -217,43 +268,45 @@ DOMAIN_CONFIGS: dict[str, DomainConfig] = {
 
 
 class ValidationError(Exception):
-    """Raised when a mobile domain CSV is structurally invalid."""
+    """Raised when a segmented domain CSV is structurally invalid."""
 
 
-def start_mobile_domains_run(dag_id: str, run_type: str = "scheduled") -> str:
-    """Create the run-level audit row for multi-domain mobile ingestion."""
+def start_segment_domains_run(dag_id: str, run_type: str = "scheduled") -> str:
+    """Create the run-level audit row for multi-domain segmented ingestion."""
     return start_pipeline_run(
         dag_id=dag_id,
-        task_id="bronze_mobile_domains_ingestion",
+        task_id="bronze_segment_domains_ingestion",
         run_type=run_type,
     )
 
 
-def discover_mobile_domain_files(domains: list[str] | None = None) -> list[str]:
-    """Discover new landing CSVs for configured mobile domains."""
+def discover_segment_domain_files(domains: list[str] | None = None) -> list[str]:
+    """Discover new landing CSVs for configured non-subscriber domains."""
     allowed_domains = set(domains or DOMAIN_CONFIGS)
     keys = list_objects(LANDING_BUCKET, prefix=LANDING_PREFIX)
-    loaded_files = loaded_files_for_bucket(LANDING_BUCKET)
+    finalized_files = finalized_files_for_bucket(LANDING_BUCKET)
     candidates: list[str] = []
 
     for key in sorted(keys):
         if not key.endswith(".csv"):
             continue
         try:
-            parsed = _parse_mobile_key(key)
+            parsed = _parse_segment_key(key)
         except ValidationError:
             continue
         if parsed["domain"] not in allowed_domains:
             continue
-        if key in loaded_files:
+        if parsed["service_segment"] not in DOMAIN_SERVICE_SEGMENTS[parsed["domain"]]:
+            continue
+        if key in finalized_files:
             continue
         candidates.append(key)
 
     return candidates
 
 
-def process_mobile_domain_file(file_key: str, run_id: str) -> dict[str, Any]:
-    """Process one non-subscriber mobile domain CSV from landing."""
+def process_segment_domain_file(file_key: str, run_id: str) -> dict[str, Any]:
+    """Process one non-subscriber segmented domain CSV from landing."""
     parsed_key = _safe_parse_key(file_key)
     domain = parsed_key.get("domain", "unknown")
     config = DOMAIN_CONFIGS.get(domain)
@@ -262,7 +315,7 @@ def process_mobile_domain_file(file_key: str, run_id: str) -> dict[str, Any]:
         if config is None:
             raise ValidationError(f"Unsupported domain: {domain}")
 
-        parsed_key = _parse_mobile_key(file_key)
+        parsed_key = _parse_segment_key(file_key)
         file_size = get_object_size(LANDING_BUCKET, file_key)
         content = download_object(LANDING_BUCKET, file_key)
         checksum = hashlib.sha256(content).hexdigest()
@@ -295,7 +348,7 @@ def process_mobile_domain_file(file_key: str, run_id: str) -> dict[str, Any]:
                     rows=insert_rows_payload,
                     conn=conn,
                 )
-                move_object(
+                copy_object(
                     source_bucket=LANDING_BUCKET,
                     source_key=file_key,
                     dest_bucket=PROCESSED_BUCKET,
@@ -326,6 +379,8 @@ def process_mobile_domain_file(file_key: str, run_id: str) -> dict[str, Any]:
                 conn.rollback()
                 raise
 
+        landing_delete_error = _delete_landing_after_finalize(file_key)
+
         return {
             "file_key": file_key,
             "domain": config.domain,
@@ -333,7 +388,7 @@ def process_mobile_domain_file(file_key: str, run_id: str) -> dict[str, Any]:
             "rows_total": len(raw_rows),
             "rows_loaded": rows_loaded,
             "rows_quarantined": 0,
-            "error_message": None,
+            "error_message": landing_delete_error,
         }
     except Exception as exc:
         return _quarantine_file(
@@ -346,7 +401,7 @@ def process_mobile_domain_file(file_key: str, run_id: str) -> dict[str, Any]:
         )
 
 
-def finish_mobile_domains_run(
+def finish_segment_domains_run(
     run_id: str,
     results: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
@@ -360,7 +415,7 @@ def finish_mobile_domains_run(
     status = "success" if not failed_files else "failed"
     error_message = None
     if failed_files:
-        error_message = f"{len(failed_files)} mobile domain file(s) failed or were quarantined"
+        error_message = f"{len(failed_files)} segmented domain file(s) failed/quarantined"
 
     finish_pipeline_run(
         run_id=run_id,
@@ -370,6 +425,9 @@ def finish_mobile_domains_run(
         records_failed=rows_failed,
         error_message=error_message,
     )
+
+    if failed_files:
+        raise AirflowException(error_message)
 
     return {
         "run_id": run_id,
@@ -381,18 +439,20 @@ def finish_mobile_domains_run(
     }
 
 
-def _parse_mobile_key(key: str) -> dict[str, str]:
+def _parse_segment_key(key: str) -> dict[str, str]:
     parts = key.split("/")
     if len(parts) != 6:
         raise ValidationError(
-            "Expected key format: mobile/<operator>/<domain>/<year>/<month>/<file>.csv"
+            "Expected key format: <segment>/<operator>/<domain>/<year>/<month>/<file>.csv"
         )
 
     service_segment, operator_id, domain, year, month, filename = parts
-    if service_segment != "mobile":
-        raise ValidationError(f"v1 ingestion only supports mobile, got {service_segment}")
+    if service_segment not in ALLOWED_SERVICE_SEGMENTS:
+        raise ValidationError(f"Unsupported service_segment: {service_segment}")
     if domain not in DOMAIN_CONFIGS:
         raise ValidationError(f"Unsupported domain: {domain}")
+    if service_segment not in DOMAIN_SERVICE_SEGMENTS[domain]:
+        raise ValidationError(f"Segment {service_segment} does not submit domain {domain}")
     if not filename.endswith(".csv"):
         raise ValidationError("Object is not a CSV file")
 
@@ -447,7 +507,8 @@ def _build_insert_rows(
             )
         if row["service_segment"] != expected_service_segment:
             raise ValidationError(
-                f"Row {source_line} service_segment={row['service_segment']} does not match path segment"
+                f"Row {source_line} service_segment={row['service_segment']} "
+                "does not match path segment"
             )
 
         raw_payload = _parse_json(row["_raw_payload"], source_line)
@@ -491,7 +552,7 @@ def _quarantine_file(
     try:
         with get_warehouse_connection() as conn:
             try:
-                move_object(
+                copy_object(
                     source_bucket=LANDING_BUCKET,
                     source_key=file_key,
                     dest_bucket=QUARANTINE_BUCKET,
@@ -521,6 +582,7 @@ def _quarantine_file(
             except Exception:
                 conn.rollback()
                 raise
+        landing_delete_error = _delete_landing_after_finalize(file_key)
     except Exception as quarantine_error:
         return {
             "file_key": file_key,
@@ -541,13 +603,13 @@ def _quarantine_file(
         "rows_total": rows_total,
         "rows_loaded": 0,
         "rows_quarantined": rows_total,
-        "error_message": reason,
+        "error_message": landing_delete_error or reason,
     }
 
 
 def _safe_parse_key(file_key: str) -> dict[str, str]:
     try:
-        return _parse_mobile_key(file_key)
+        return _parse_segment_key(file_key)
     except ValidationError:
         return {
             "operator_id": "UNKNOWN",
@@ -561,6 +623,21 @@ def _safe_get_object_size(file_key: str) -> int:
         return get_object_size(LANDING_BUCKET, file_key)
     except Exception:
         return 0
+
+
+def _delete_landing_after_finalize(file_key: str) -> str | None:
+    """
+    Best-effort cleanup after the DB audit row is committed.
+
+    A delete failure should not turn a loaded/quarantined file into a failed
+    ingestion. Discovery skips finalized audit rows, so a reconciliation job can
+    safely clean up any copied-but-not-deleted landing objects later.
+    """
+    try:
+        delete_object(LANDING_BUCKET, file_key)
+    except Exception as exc:
+        return f"Landing delete failed after finalization: {exc}"
+    return None
 
 
 def _clean_string(value: str | None) -> str | None:

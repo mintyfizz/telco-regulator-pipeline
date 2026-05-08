@@ -16,22 +16,30 @@ import json
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from airflow.exceptions import AirflowException
 from psycopg2.extras import Json
 
 from lib.audit import (
+    finalized_files_for_bucket,
     finish_pipeline_run,
-    loaded_files_for_bucket,
     record_file_ingestion,
     start_pipeline_run,
 )
-from lib.minio_helpers import download_object, get_object_size, list_objects, move_object
+from lib.minio_helpers import (
+    copy_object,
+    delete_object,
+    download_object,
+    get_object_size,
+    list_objects,
+)
 from lib.postgres_helpers import get_warehouse_connection, insert_rows
 
 LANDING_BUCKET = "landing"
 PROCESSED_BUCKET = "processed"
 QUARANTINE_BUCKET = "quarantine"
 DOMAIN = "subscribers"
-LANDING_PREFIX = "mobile/"
+LANDING_PREFIX = ""
+ALLOWED_SERVICE_SEGMENTS = {"mobile", "fixed_voice", "fixed_broadband"}
 
 REQUIRED_COLUMNS = {
     "source_submission_id",
@@ -97,11 +105,11 @@ def discover_subscriber_files() -> list[str]:
     """
     Discover new subscriber CSVs in landing.
 
-    Only v1 mobile files are in scope:
-    landing/mobile/<operator>/subscribers/<year>/<month>/<file>.csv
+    Files are expected at:
+    landing/<segment>/<operator>/subscribers/<year>/<month>/<file>.csv
     """
     keys = list_objects(LANDING_BUCKET, prefix=LANDING_PREFIX)
-    loaded_files = loaded_files_for_bucket(LANDING_BUCKET)
+    finalized_files = finalized_files_for_bucket(LANDING_BUCKET)
     candidates: list[str] = []
 
     for key in sorted(keys):
@@ -113,7 +121,7 @@ def discover_subscriber_files() -> list[str]:
             continue
         if parsed["domain"] != DOMAIN:
             continue
-        if key in loaded_files:
+        if key in finalized_files:
             continue
         candidates.append(key)
 
@@ -151,39 +159,45 @@ def process_subscriber_file(file_key: str, run_id: str) -> dict[str, Any]:
 
     try:
         with get_warehouse_connection() as conn:
-            rows_loaded = insert_rows(
-                table_name="bronze.subscribers",
-                columns=INSERT_COLUMNS,
-                rows=insert_rows_payload,
-                conn=conn,
-            )
-            move_object(
-                source_bucket=LANDING_BUCKET,
-                source_key=file_key,
-                dest_bucket=PROCESSED_BUCKET,
-                dest_key=file_key,
-                additional_metadata={
-                    "ingestion-status": "loaded",
-                    "loaded-by-run-id": run_id,
-                    "rows-loaded": str(rows_loaded),
-                },
-            )
-            record_file_ingestion(
-                run_id=run_id,
-                source_file=file_key,
-                source_bucket=LANDING_BUCKET,
-                data_domain=DOMAIN,
-                operator_id=parsed_key["operator_id"],
-                status="loaded",
-                file_size_bytes=file_size,
-                rows_total=len(raw_rows),
-                rows_loaded=rows_loaded,
-                rows_quarantined=0,
-                report_period=parsed_key["report_period"],
-                file_checksum_sha256=checksum,
-                conn=conn,
-            )
-            conn.commit()
+            try:
+                rows_loaded = insert_rows(
+                    table_name="bronze.subscribers",
+                    columns=INSERT_COLUMNS,
+                    rows=insert_rows_payload,
+                    conn=conn,
+                )
+                copy_object(
+                    source_bucket=LANDING_BUCKET,
+                    source_key=file_key,
+                    dest_bucket=PROCESSED_BUCKET,
+                    dest_key=file_key,
+                    additional_metadata={
+                        "ingestion-status": "loaded",
+                        "loaded-by-run-id": run_id,
+                        "rows-loaded": str(rows_loaded),
+                    },
+                )
+                record_file_ingestion(
+                    run_id=run_id,
+                    source_file=file_key,
+                    source_bucket=LANDING_BUCKET,
+                    data_domain=DOMAIN,
+                    operator_id=parsed_key["operator_id"],
+                    status="loaded",
+                    file_size_bytes=file_size,
+                    rows_total=len(raw_rows),
+                    rows_loaded=rows_loaded,
+                    rows_quarantined=0,
+                    report_period=parsed_key["report_period"],
+                    file_checksum_sha256=checksum,
+                    conn=conn,
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+        landing_delete_error = _delete_landing_after_finalize(file_key)
 
         return {
             "file_key": file_key,
@@ -191,7 +205,7 @@ def process_subscriber_file(file_key: str, run_id: str) -> dict[str, Any]:
             "rows_total": len(raw_rows),
             "rows_loaded": rows_loaded,
             "rows_quarantined": 0,
-            "error_message": None,
+            "error_message": landing_delete_error,
         }
     except Exception as exc:
         return _quarantine_file(
@@ -228,6 +242,9 @@ def finish_subscribers_run(run_id: str, results: list[dict[str, Any]] | None) ->
         error_message=error_message,
     )
 
+    if failed_files:
+        raise AirflowException(error_message)
+
     return {
         "run_id": run_id,
         "status": status,
@@ -248,8 +265,10 @@ def _parse_subscriber_key(key: str) -> dict[str, str]:
     service_segment, operator_id, domain, year, month, filename = parts
     if domain != DOMAIN:
         raise ValidationError(f"Expected domain '{DOMAIN}', got '{domain}'")
-    if service_segment != "mobile":
-        raise ValidationError(f"v1 subscriber ingestion only supports mobile, got {service_segment}")
+    if service_segment not in ALLOWED_SERVICE_SEGMENTS:
+        raise ValidationError(
+            f"unsupported subscriber service_segment={service_segment}"
+        )
     if not filename.endswith(".csv"):
         raise ValidationError("Object is not a CSV file")
 
@@ -303,7 +322,8 @@ def _build_insert_rows(
             )
         if row["service_segment"] != expected_service_segment:
             raise ValidationError(
-                f"Row {source_line} service_segment={row['service_segment']} does not match path segment"
+                f"Row {source_line} service_segment={row['service_segment']} "
+                "does not match path segment"
             )
 
         raw_payload = _parse_json(row["_raw_payload"], source_line)
@@ -343,33 +363,38 @@ def _quarantine_file(
     parsed_key = _safe_parse_key(file_key)
     try:
         with get_warehouse_connection() as conn:
-            move_object(
-                source_bucket=LANDING_BUCKET,
-                source_key=file_key,
-                dest_bucket=QUARANTINE_BUCKET,
-                dest_key=file_key,
-                additional_metadata={
-                    "ingestion-status": "quarantined",
-                    "quarantine-reason": reason[:500],
-                    "loaded-by-run-id": run_id,
-                },
-            )
-            record_file_ingestion(
-                run_id=run_id,
-                source_file=file_key,
-                source_bucket=LANDING_BUCKET,
-                data_domain=DOMAIN,
-                operator_id=parsed_key.get("operator_id", "UNKNOWN"),
-                status="quarantined",
-                file_size_bytes=file_size_bytes,
-                rows_total=rows_total,
-                rows_loaded=0,
-                rows_quarantined=rows_total,
-                report_period=parsed_key.get("report_period"),
-                error_message=reason[:1000],
-                conn=conn,
-            )
-            conn.commit()
+            try:
+                copy_object(
+                    source_bucket=LANDING_BUCKET,
+                    source_key=file_key,
+                    dest_bucket=QUARANTINE_BUCKET,
+                    dest_key=file_key,
+                    additional_metadata={
+                        "ingestion-status": "quarantined",
+                        "quarantine-reason": reason[:500],
+                        "loaded-by-run-id": run_id,
+                    },
+                )
+                record_file_ingestion(
+                    run_id=run_id,
+                    source_file=file_key,
+                    source_bucket=LANDING_BUCKET,
+                    data_domain=DOMAIN,
+                    operator_id=parsed_key.get("operator_id", "UNKNOWN"),
+                    status="quarantined",
+                    file_size_bytes=file_size_bytes,
+                    rows_total=rows_total,
+                    rows_loaded=0,
+                    rows_quarantined=rows_total,
+                    report_period=parsed_key.get("report_period"),
+                    error_message=reason[:1000],
+                    conn=conn,
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        landing_delete_error = _delete_landing_after_finalize(file_key)
     except Exception as quarantine_error:
         return {
             "file_key": file_key,
@@ -388,7 +413,7 @@ def _quarantine_file(
         "rows_total": rows_total,
         "rows_loaded": 0,
         "rows_quarantined": rows_total,
-        "error_message": reason,
+        "error_message": landing_delete_error or reason,
     }
 
 
@@ -404,6 +429,21 @@ def _safe_get_object_size(file_key: str) -> int:
         return get_object_size(LANDING_BUCKET, file_key)
     except Exception:
         return 0
+
+
+def _delete_landing_after_finalize(file_key: str) -> str | None:
+    """
+    Best-effort cleanup after the DB audit row is committed.
+
+    A delete failure should not turn a loaded/quarantined file into a failed
+    ingestion. Discovery skips finalized audit rows, so a reconciliation job can
+    safely clean up any copied-but-not-deleted landing objects later.
+    """
+    try:
+        delete_object(LANDING_BUCKET, file_key)
+    except Exception as exc:
+        return f"Landing delete failed after finalization: {exc}"
+    return None
 
 
 def _clean_string(value: str | None) -> str | None:

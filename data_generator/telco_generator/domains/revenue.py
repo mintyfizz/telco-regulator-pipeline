@@ -18,7 +18,11 @@ from datetime import datetime
 
 import numpy as np
 
-from telco_generator.constants.operators import get_mobile_internet_market_operators
+from telco_generator.constants.operators import (
+    get_fixed_broadband_operators,
+    get_fixed_voice_operators,
+    get_mobile_internet_market_operators,
+)
 from telco_generator.constants.trajectories import (
     INTERNET_TRAFFIC_SHARES,
     TOTAL_INTERNET_REVENUE_XAF,
@@ -47,6 +51,8 @@ SMS_INCOMING_RATIO = 0.0004
 VAS_RATIO = 0.05  # value-added services as fraction of voice/SMS revenue
 OTHER_RATIO = 0.02
 USF_CONTRIBUTION_RATE = 0.03  # 3% of total revenue
+FIXED_VOICE_ARPU_XAF = 7_500
+FIXED_BROADBAND_ARPU_XAF = 18_000
 
 # Approximate 2024 telephony revenue (voice + SMS) per operator.
 # Values sum to the 128.891B FCFA national anchor, so adding smaller operators
@@ -82,6 +88,11 @@ class RevenueRow:
     revenue_internet_3g_xaf: int
     revenue_internet_4g_xaf: int
     revenue_internet_5g_xaf: int | None
+    revenue_fixed_voice_subscription_xaf: int
+    revenue_fixed_voice_usage_xaf: int
+    revenue_fixed_broadband_subscription_xaf: int
+    revenue_fixed_broadband_usage_xaf: int
+    revenue_equipment_rental_xaf: int
     revenue_value_added_services_xaf: int
     revenue_other_xaf: int
     total_revenue_xaf: int
@@ -217,8 +228,143 @@ def generate_revenue_for_period(
             revenue_internet_3g_xaf=rev_internet_3g,
             revenue_internet_4g_xaf=rev_internet_4g,
             revenue_internet_5g_xaf=None,
+            revenue_fixed_voice_subscription_xaf=0,
+            revenue_fixed_voice_usage_xaf=0,
+            revenue_fixed_broadband_subscription_xaf=0,
+            revenue_fixed_broadband_usage_xaf=0,
+            revenue_equipment_rental_xaf=0,
             revenue_value_added_services_xaf=rev_vas,
             revenue_other_xaf=rev_other,
+            total_revenue_xaf=total,
+            usf_contribution_xaf=usf,
+            submitted_at=period.submission_timestamp().isoformat(),
+            _source_file=source_file,
+            _source_line=line_counter,
+            _loaded_at=datetime.now().isoformat(),
+            _loaded_by_run_id=run_id,
+            _raw_payload=json.dumps(raw_payload),
+        ))
+        line_counter += 1
+
+    for operator in get_fixed_voice_operators():
+        subscriber_count = (
+            operator.fixed_subscribers_2024
+            * ((1 + operator.mobile_growth_rate_annual) ** (period.year - 2024))
+        )
+        monthly_base = (
+            subscriber_count
+            * FIXED_VOICE_ARPU_XAF
+            * seasonal_factor(period.month, amplitude=0.02)
+            * operator.arpu_premium_factor
+            * lognormal_noise(rng, sigma=0.05)
+        )
+        subscription = int(monthly_base * 0.62)
+        usage = int(monthly_base * 0.33)
+        equipment = int(monthly_base * 0.03)
+        other = int(monthly_base * 0.02)
+        total = subscription + usage + equipment + other
+        usf = int(total * USF_CONTRIBUTION_RATE)
+
+        submission_id = f"REV-{operator.operator_id}-{period.period_str}-FIXV"
+        raw_payload = {
+            "operator_id": operator.operator_id,
+            "report_period": period.period_str,
+            "service_segment": "fixed_voice",
+            "total_revenue_xaf": total,
+        }
+
+        rows.append(RevenueRow(
+            bronze_id=str(uuid.uuid4()),
+            source_submission_id=submission_id,
+            operator_id=operator.operator_id,
+            report_period=period.period_str,
+            service_segment="fixed_voice",
+            revenue_voice_outgoing_onnet_xaf=0,
+            revenue_voice_outgoing_offnet_xaf=0,
+            revenue_voice_outgoing_international_xaf=0,
+            revenue_voice_incoming_national_xaf=0,
+            revenue_voice_incoming_international_xaf=0,
+            revenue_sms_outgoing_onnet_xaf=0,
+            revenue_sms_outgoing_offnet_xaf=0,
+            revenue_sms_outgoing_international_xaf=0,
+            revenue_sms_incoming_xaf=0,
+            revenue_internet_2g_xaf=0,
+            revenue_internet_3g_xaf=0,
+            revenue_internet_4g_xaf=0,
+            revenue_internet_5g_xaf=0,
+            revenue_fixed_voice_subscription_xaf=subscription,
+            revenue_fixed_voice_usage_xaf=usage,
+            revenue_fixed_broadband_subscription_xaf=0,
+            revenue_fixed_broadband_usage_xaf=0,
+            revenue_equipment_rental_xaf=equipment,
+            revenue_value_added_services_xaf=0,
+            revenue_other_xaf=other,
+            total_revenue_xaf=total,
+            usf_contribution_xaf=usf,
+            submitted_at=period.submission_timestamp().isoformat(),
+            _source_file=source_file,
+            _source_line=line_counter,
+            _loaded_at=datetime.now().isoformat(),
+            _loaded_by_run_id=run_id,
+            _raw_payload=json.dumps(raw_payload),
+        ))
+        line_counter += 1
+
+    for operator in get_fixed_broadband_operators():
+        subscriber_anchor = operator.isp_subscribers_2024 or operator.fixed_subscribers_2024
+        subscriber_count = (
+            subscriber_anchor
+            * ((1 + operator.internet_growth_rate_annual) ** (period.year - 2024))
+        )
+        monthly_base = (
+            subscriber_count
+            * FIXED_BROADBAND_ARPU_XAF
+            * seasonal_factor(period.month, amplitude=0.025)
+            * operator.arpu_premium_factor
+            * lognormal_noise(rng, sigma=0.06)
+        )
+        subscription = int(monthly_base * 0.78)
+        usage = int(monthly_base * 0.12)
+        equipment = int(monthly_base * 0.06)
+        vas = int(monthly_base * 0.02)
+        other = int(monthly_base * 0.02)
+        total = subscription + usage + equipment + vas + other
+        usf = int(total * USF_CONTRIBUTION_RATE)
+
+        submission_id = f"REV-{operator.operator_id}-{period.period_str}-FIXB"
+        raw_payload = {
+            "operator_id": operator.operator_id,
+            "report_period": period.period_str,
+            "service_segment": "fixed_broadband",
+            "total_revenue_xaf": total,
+        }
+
+        rows.append(RevenueRow(
+            bronze_id=str(uuid.uuid4()),
+            source_submission_id=submission_id,
+            operator_id=operator.operator_id,
+            report_period=period.period_str,
+            service_segment="fixed_broadband",
+            revenue_voice_outgoing_onnet_xaf=0,
+            revenue_voice_outgoing_offnet_xaf=0,
+            revenue_voice_outgoing_international_xaf=0,
+            revenue_voice_incoming_national_xaf=0,
+            revenue_voice_incoming_international_xaf=0,
+            revenue_sms_outgoing_onnet_xaf=0,
+            revenue_sms_outgoing_offnet_xaf=0,
+            revenue_sms_outgoing_international_xaf=0,
+            revenue_sms_incoming_xaf=0,
+            revenue_internet_2g_xaf=0,
+            revenue_internet_3g_xaf=0,
+            revenue_internet_4g_xaf=0,
+            revenue_internet_5g_xaf=0,
+            revenue_fixed_voice_subscription_xaf=0,
+            revenue_fixed_voice_usage_xaf=0,
+            revenue_fixed_broadband_subscription_xaf=subscription,
+            revenue_fixed_broadband_usage_xaf=usage,
+            revenue_equipment_rental_xaf=equipment,
+            revenue_value_added_services_xaf=vas,
+            revenue_other_xaf=other,
             total_revenue_xaf=total,
             usf_contribution_xaf=usf,
             submitted_at=period.submission_timestamp().isoformat(),

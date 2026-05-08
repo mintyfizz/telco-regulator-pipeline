@@ -2,10 +2,10 @@
 -- 03_bronze_subscribers.sql
 -- Raw subscriber submissions from operators.
 --
--- Subscriber data is segmented along three orthogonal dimensions:
+-- Subscriber data is segmented by service_segment first, then by:
 --   1. service_category — what kind of service (mobile telephony, mobile internet, fixed)
 --   2. payment_type — prepaid or postpaid
---   3. technology_generation — for internet only (2G, 3G, 4G, 5G)
+--   3. technology_generation — mobile internet generation only (2G, 3G, 4G, 5G)
 --
 -- A single physical subscriber can appear in multiple rows. For example a
 -- prepaid mobile customer who uses 4G data appears once as mobile_telephony
@@ -22,7 +22,7 @@ CREATE TABLE bronze.subscribers (
     report_period               VARCHAR(7),
     region_code                 VARCHAR(8),
 
-    -- Service segment — broadest classification. v1 only populates 'mobile'.
+    -- Service segment — broadest classification.
     service_segment             VARCHAR(30)     NOT NULL DEFAULT 'mobile',
 
     -- Three-dimensional service segmentation within a segment.
@@ -44,11 +44,14 @@ CREATE TABLE bronze.subscribers (
     _source_line                INTEGER         NOT NULL,
     _loaded_at                  TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     _loaded_by_run_id           UUID            NOT NULL,
-    _raw_payload                JSONB           NOT NULL
+    _raw_payload                JSONB           NOT NULL,
+
+    CONSTRAINT fk_bronze_subscribers_run
+        FOREIGN KEY (_loaded_by_run_id) REFERENCES audit.pipeline_runs(run_id)
 );
 
-CREATE INDEX idx_bronze_subscribers_operator_period
-    ON bronze.subscribers (operator_id, report_period);
+CREATE INDEX idx_bronze_subscribers_segment_operator_period_region
+    ON bronze.subscribers (service_segment, operator_id, report_period, region_code);
 
 CREATE INDEX idx_bronze_subscribers_category
     ON bronze.subscribers (service_category, technology_generation);
@@ -63,10 +66,10 @@ CREATE INDEX idx_bronze_subscribers_run
     ON bronze.subscribers (_loaded_by_run_id);
 
 COMMENT ON TABLE bronze.subscribers IS
-'Raw subscriber data submissions from operators. Segmented by service_category, payment_type, and (for internet) technology_generation.';
+'Raw subscriber data submissions from operators. Segmented by service_segment, service_category, payment_type, and technology_generation where applicable.';
 
 COMMENT ON COLUMN bronze.subscribers.service_segment IS
-'Top-level operator segment: mobile, fixed_voice, fixed_broadband, postal, satellite. v1 populates mobile only; remaining segments roadmapped for v1.1+.';
+'Top-level operator segment: mobile, fixed_voice, fixed_broadband, postal, satellite. Current generator populates mobile, fixed_voice, and fixed_broadband.';
 
 COMMENT ON COLUMN bronze.subscribers.service_category IS
 'Type of service: mobile_telephony, mobile_internet, fixed_voice, fixed_broadband.';

@@ -48,6 +48,7 @@ select = ["E", "F", "I", "N", "W", "B", "UP", "ANN"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ANN"]
+"airflow/dags/**" = ["ANN"]
 
 [tool.pytest.ini_options]
 testpaths = ["data_generator/tests"]

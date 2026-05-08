@@ -8,7 +8,7 @@ audit.file_ingestions row linked to that run.
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from lib.postgres_helpers import execute_sql
@@ -24,7 +24,7 @@ def start_pipeline_run(dag_id: str, task_id: str, run_type: str = "scheduled") -
     """
     execute_sql(
         sql,
-        (run_id, dag_id, task_id, datetime.now(timezone.utc), json.dumps({"run_type": run_type})),
+        (run_id, dag_id, task_id, datetime.now(UTC), json.dumps({"run_type": run_type})),
     )
     return run_id
 
@@ -37,7 +37,11 @@ def finish_pipeline_run(
     records_failed: int = 0,
     error_message: str | None = None,
 ) -> None:
-    """Update pipeline_runs with final status and stats. status must be 'success'|'failed'|'cancelled'."""
+    """
+    Update pipeline_runs with final status and stats.
+
+    status must be one of: success, failed, cancelled.
+    """
     sql = """
         UPDATE audit.pipeline_runs
         SET status = %s,
@@ -52,7 +56,7 @@ def finish_pipeline_run(
         sql,
         (
             status,
-            datetime.now(timezone.utc),
+            datetime.now(UTC),
             records_processed,
             records_failed,
             error_message,
@@ -114,6 +118,16 @@ def loaded_files_for_bucket(source_bucket: str) -> set[str]:
     sql = """
         SELECT source_file FROM audit.file_ingestions
         WHERE source_bucket = %s AND status = 'loaded'
+    """
+    rows = execute_sql(sql, (source_bucket,), fetch_all=True) or []
+    return {row[0] for row in rows}
+
+
+def finalized_files_for_bucket(source_bucket: str) -> set[str]:
+    """Return source_file keys that reached a terminal loaded/quarantined state."""
+    sql = """
+        SELECT source_file FROM audit.file_ingestions
+        WHERE source_bucket = %s AND status IN ('loaded', 'quarantined')
     """
     rows = execute_sql(sql, (source_bucket,), fetch_all=True) or []
     return {row[0] for row in rows}

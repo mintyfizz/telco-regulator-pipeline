@@ -5,10 +5,8 @@ The path convention is:
     landing/<segment>/<operator_id>/<domain>/<year>/<month>/<filename>.csv
 
 Operator ID and service segment are parsed from the CSV content itself. Each
-domain CSV can contain rows across multiple operators, so we split by operator
-and upload separate files per operator
-— matching how operators would actually submit (each operator only knows
-their own data).
+domain CSV can contain rows across multiple segments and operators, so we split
+by (service_segment, operator_id) and upload separate files per submission.
 """
 
 import csv
@@ -45,27 +43,32 @@ class UploadStats:
     bytes_uploaded: int = 0
 
 
-def _split_csv_by_operator(csv_path: Path) -> dict[str, list[dict]]:
+def _split_csv_by_segment_operator(csv_path: Path) -> dict[tuple[str, str], list[dict]]:
     """
-    Read a CSV and split rows by operator_id.
+    Read a CSV and split rows by (service_segment, operator_id).
 
-    Each domain CSV contains rows for multiple operators. To simulate real
-    operator submissions, we split the file by operator before uploading.
+    Each domain CSV contains rows for multiple operators and sometimes multiple
+    segments for the same operator. To simulate real submissions, split before
+    uploading so fixed_voice and fixed_broadband do not land in the same object.
     """
-    rows_by_operator: dict[str, list[dict]] = defaultdict(list)
+    rows_by_submission: dict[tuple[str, str], list[dict]] = defaultdict(list)
 
     with csv_path.open("r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        if reader.fieldnames is None or "operator_id" not in reader.fieldnames:
-            raise ValueError(f"{csv_path} is missing required operator_id column")
+        required = {"operator_id", "service_segment"}
+        if reader.fieldnames is None or not required.issubset(reader.fieldnames):
+            raise ValueError(f"{csv_path} is missing required columns: {sorted(required)}")
 
         for line_number, row in enumerate(reader, start=2):
             operator_id = (row.get("operator_id") or "").strip()
+            service_segment = (row.get("service_segment") or "").strip()
             if not operator_id:
                 raise ValueError(f"{csv_path}:{line_number} has empty operator_id")
-            rows_by_operator[operator_id].append(row)
+            if not service_segment:
+                raise ValueError(f"{csv_path}:{line_number} has empty service_segment")
+            rows_by_submission[(service_segment, operator_id)].append(row)
 
-    return dict(rows_by_operator)
+    return dict(rows_by_submission)
 
 
 def _rows_to_csv_bytes(rows: list[dict]) -> bytes:
@@ -121,7 +124,7 @@ def upload_domain_period(
 
     try:
         year, month = _parse_period_from_filename(csv_path.name)
-        rows_by_operator = _split_csv_by_operator(csv_path)
+        rows_by_submission = _split_csv_by_segment_operator(csv_path)
     except Exception as e:
         logger.error(
             "upload_file_rejected",
@@ -132,11 +135,10 @@ def upload_domain_period(
         stats.files_failed += 1
         return stats
 
-    for operator_id, rows in rows_by_operator.items():
+    for (service_segment, operator_id), rows in rows_by_submission.items():
         if not rows:
             continue
 
-        service_segment = (rows[0].get("service_segment") or "mobile").strip() or "mobile"
         key = _build_object_key(service_segment, operator_id, domain, year, month)
 
         if skip_existing and client.object_exists(LANDING_BUCKET, key):

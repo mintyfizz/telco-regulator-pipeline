@@ -159,8 +159,8 @@ def verify(endpoint: str, access_key: str, secret_key: str) -> None:
             keys = client.list_objects(bucket)
             click.echo(f"\nBucket '{bucket}': {len(keys):,} objects")
 
-            if keys and bucket == "landing":
-                # Group by segment, operator, and domain for landing.
+            if keys:
+                # Group by segment, operator, and domain for any bucket.
                 by_segment: dict[str, int] = {}
                 by_operator: dict[str, int] = {}
                 by_domain: dict[str, int] = {}

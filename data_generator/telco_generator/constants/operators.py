@@ -5,9 +5,9 @@ Market share weights drive subscriber/traffic/revenue distribution.
 Trajectory parameters shape 5-year evolution.
 
 The two largest operators reflect the Congolese mobile duopoly market shape
-without using real names. Fixed and ISP operators remain in the catalog for
-future fixed/ISP domains, but v1 mobile generators only emit submissions for
-operators with operator_type == "mobile".
+without using real names. Fixed and ISP operators emit fixed_voice and
+fixed_broadband submissions so the pipeline models all currently licensed
+segments in the fictional operator catalog.
 """
 
 from dataclasses import dataclass
@@ -20,6 +20,7 @@ class OperatorProfile:
     operator_id: str
     operator_name: str
     operator_type: str  # mobile, fixed, isp
+    service_segments: tuple[str, ...]
     is_state_owned: bool
 
     # 2024 market-share weights. The generator normalizes these weights against
@@ -40,15 +41,16 @@ class OperatorProfile:
 
 
 # Calibrated to ARPCE 2024 reports.
-# National totals remain 6.050M mobile telephony subscribers and 3.757M mobile
-# internet subscribers. The values below are allocation weights, not additive
-# totals. For v1, mobile-specific generators use only legal mobile operators;
-# fixed/ISP operators stay available for future segment-specific generators.
+# National mobile totals remain 6.050M mobile telephony subscribers and 3.757M
+# mobile internet subscribers. Fixed and ISP subscriber counts are synthetic
+# local-market anchors because public ARPCE reports used for calibration focus
+# on mobile. They are intentionally smaller and concentrated in urban regions.
 OPERATORS: dict[str, OperatorProfile] = {
     "OPA01": OperatorProfile(
         operator_id="OPA01",
         operator_name="Mokongo Mobile",
         operator_type="mobile",
+        service_segments=("mobile",),
         is_state_owned=False,
         mobile_subscribers_2024=3_761_000,
         mobile_internet_subscribers_2024=2_680_000,
@@ -64,6 +66,7 @@ OPERATORS: dict[str, OperatorProfile] = {
         operator_id="OPA02",
         operator_name="Sangha Telecom",
         operator_type="mobile",
+        service_segments=("mobile",),
         is_state_owned=False,
         mobile_subscribers_2024=2_288_000,
         mobile_internet_subscribers_2024=1_077_000,
@@ -79,11 +82,12 @@ OPERATORS: dict[str, OperatorProfile] = {
         operator_id="OPA03",
         operator_name="Congo Réseau",
         operator_type="fixed",
+        service_segments=("fixed_voice", "fixed_broadband"),
         is_state_owned=True,
-        mobile_subscribers_2024=60_000,
-        mobile_internet_subscribers_2024=30_000,
+        mobile_subscribers_2024=0,
+        mobile_internet_subscribers_2024=0,
         fixed_subscribers_2024=85_000,
-        isp_subscribers_2024=0,
+        isp_subscribers_2024=65_000,
         mobile_growth_rate_annual=0.0,
         internet_growth_rate_annual=0.03,
         market_position="leader",  # Dominant in fixed
@@ -94,9 +98,10 @@ OPERATORS: dict[str, OperatorProfile] = {
         operator_id="OPA04",
         operator_name="Avenir Net",
         operator_type="isp",
+        service_segments=("fixed_broadband",),
         is_state_owned=False,
-        mobile_subscribers_2024=45_000,
-        mobile_internet_subscribers_2024=25_000,
+        mobile_subscribers_2024=0,
+        mobile_internet_subscribers_2024=0,
         fixed_subscribers_2024=0,
         isp_subscribers_2024=120_000,
         mobile_growth_rate_annual=0.0,
@@ -109,9 +114,10 @@ OPERATORS: dict[str, OperatorProfile] = {
         operator_id="OPA05",
         operator_name="Likouala Connect",
         operator_type="isp",
+        service_segments=("fixed_broadband",),
         is_state_owned=False,
-        mobile_subscribers_2024=30_000,
-        mobile_internet_subscribers_2024=18_000,
+        mobile_subscribers_2024=0,
+        mobile_internet_subscribers_2024=0,
         fixed_subscribers_2024=0,
         isp_subscribers_2024=75_000,
         mobile_growth_rate_annual=0.0,
@@ -124,9 +130,10 @@ OPERATORS: dict[str, OperatorProfile] = {
         operator_id="OPA06",
         operator_name="Niari Web",
         operator_type="isp",
+        service_segments=("fixed_broadband",),
         is_state_owned=False,
-        mobile_subscribers_2024=20_000,
-        mobile_internet_subscribers_2024=12_000,
+        mobile_subscribers_2024=0,
+        mobile_internet_subscribers_2024=0,
         fixed_subscribers_2024=0,
         isp_subscribers_2024=45_000,
         mobile_growth_rate_annual=0.0,
@@ -139,9 +146,10 @@ OPERATORS: dict[str, OperatorProfile] = {
         operator_id="OPA07",
         operator_name="Plateaux Digital",
         operator_type="isp",
+        service_segments=("fixed_broadband",),
         is_state_owned=False,
-        mobile_subscribers_2024=15_000,
-        mobile_internet_subscribers_2024=8_000,
+        mobile_subscribers_2024=0,
+        mobile_internet_subscribers_2024=0,
         fixed_subscribers_2024=0,
         isp_subscribers_2024=28_000,
         mobile_growth_rate_annual=0.0,
@@ -178,8 +186,23 @@ def get_internet_capable_operators() -> list[OperatorProfile]:
     """Return operators that provide internet (mobile + ISP)."""
     return [
         op for op in OPERATORS.values()
-        if op.operator_type in ("mobile", "isp")
+        if "mobile" in op.service_segments or "fixed_broadband" in op.service_segments
     ]
+
+
+def get_fixed_voice_operators() -> list[OperatorProfile]:
+    """Return operators licensed for fixed voice services."""
+    return [op for op in OPERATORS.values() if "fixed_voice" in op.service_segments]
+
+
+def get_fixed_broadband_operators() -> list[OperatorProfile]:
+    """Return operators licensed for fixed broadband services."""
+    return [op for op in OPERATORS.values() if "fixed_broadband" in op.service_segments]
+
+
+def get_segment_operators(service_segment: str) -> list[OperatorProfile]:
+    """Return operators licensed for the requested service segment."""
+    return [op for op in OPERATORS.values() if service_segment in op.service_segments]
 
 
 def get_operator(operator_id: str) -> OperatorProfile:

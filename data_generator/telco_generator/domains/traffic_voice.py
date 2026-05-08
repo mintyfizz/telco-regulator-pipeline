@@ -19,6 +19,7 @@ import numpy as np
 
 from telco_generator.constants.operators import (
     OperatorProfile,
+    get_fixed_voice_operators,
     get_mobile_market_operators,
 )
 from telco_generator.constants.regions import get_population_weights
@@ -39,6 +40,15 @@ INTERNATIONAL_OUTGOING_SHARE = 0.002
 INCOMING_NATIONAL_RATIO = 0.136  # roughly equal to off-net outgoing across duopoly
 INCOMING_INTERNATIONAL_RATIO = 0.0026
 
+# Fixed voice assumptions. Public calibration is mobile-first, so these are
+# conservative synthetic anchors for a small fixed-line segment.
+FIXED_MONTHLY_MINUTES_PER_SUBSCRIBER = 75
+FIXED_LOCAL_SHARE = 0.62
+FIXED_NATIONAL_SHARE = 0.32
+FIXED_INTERNATIONAL_OUTGOING_SHARE = 0.06
+FIXED_INCOMING_NATIONAL_RATIO = 0.28
+FIXED_INCOMING_INTERNATIONAL_RATIO = 0.03
+
 
 @dataclass
 class TrafficVoiceRow:
@@ -53,6 +63,11 @@ class TrafficVoiceRow:
     voice_minutes_outgoing_international: int
     voice_minutes_incoming_national: int
     voice_minutes_incoming_international: int
+    voice_minutes_fixed_local: int
+    voice_minutes_fixed_national: int
+    voice_minutes_fixed_international_outgoing: int
+    voice_minutes_fixed_incoming_national: int
+    voice_minutes_fixed_incoming_international: int
     submitted_at: str
     _source_file: str
     _source_line: int
@@ -90,11 +105,17 @@ def _make_row(
     operator_id: str,
     period: ReportingPeriod,
     region_code: str,
+    service_segment: str,
     onnet: int,
     offnet: int,
     intl_out: int,
     incoming_nat: int,
     incoming_intl: int,
+    fixed_local: int,
+    fixed_national: int,
+    fixed_intl_out: int,
+    fixed_in_nat: int,
+    fixed_in_intl: int,
     source_file: str,
     source_line: int,
     run_id: str,
@@ -104,12 +125,17 @@ def _make_row(
         "operator_id": operator_id,
         "report_period": period.period_str,
         "region_code": region_code,
-        "service_segment": "mobile",
+        "service_segment": service_segment,
         "voice_minutes_outgoing_onnet": onnet,
         "voice_minutes_outgoing_offnet": offnet,
         "voice_minutes_outgoing_international": intl_out,
         "voice_minutes_incoming_national": incoming_nat,
         "voice_minutes_incoming_international": incoming_intl,
+        "voice_minutes_fixed_local": fixed_local,
+        "voice_minutes_fixed_national": fixed_national,
+        "voice_minutes_fixed_international_outgoing": fixed_intl_out,
+        "voice_minutes_fixed_incoming_national": fixed_in_nat,
+        "voice_minutes_fixed_incoming_international": fixed_in_intl,
     }
     return TrafficVoiceRow(
         bronze_id=str(uuid.uuid4()),
@@ -117,12 +143,17 @@ def _make_row(
         operator_id=operator_id,
         report_period=period.period_str,
         region_code=region_code,
-        service_segment="mobile",
+        service_segment=service_segment,
         voice_minutes_outgoing_onnet=onnet,
         voice_minutes_outgoing_offnet=offnet,
         voice_minutes_outgoing_international=intl_out,
         voice_minutes_incoming_national=incoming_nat,
         voice_minutes_incoming_international=incoming_intl,
+        voice_minutes_fixed_local=fixed_local,
+        voice_minutes_fixed_national=fixed_national,
+        voice_minutes_fixed_international_outgoing=fixed_intl_out,
+        voice_minutes_fixed_incoming_national=fixed_in_nat,
+        voice_minutes_fixed_incoming_international=fixed_in_intl,
         submitted_at=period.submission_timestamp().isoformat(),
         _source_file=source_file,
         _source_line=source_line,
@@ -174,7 +205,52 @@ def generate_traffic_voice_for_period(
 
             rows.append(_make_row(
                 op_id, period, region_code,
+                "mobile",
                 onnet, offnet, intl_out, incoming_nat, incoming_intl,
+                0, 0, 0, 0, 0,
+                source_file, line_counter, run_id,
+            ))
+            line_counter += 1
+
+    for operator in get_fixed_voice_operators():
+        fixed_subscribers = int(
+            operator.fixed_subscribers_2024
+            * ((1 + operator.mobile_growth_rate_annual) ** (period.year - 2024))
+        )
+        monthly_total = (
+            fixed_subscribers
+            * FIXED_MONTHLY_MINUTES_PER_SUBSCRIBER
+            * seasonal_factor(period.month, amplitude=0.03)
+        )
+        per_region = _allocate_to_regions(int(monthly_total), rng)
+
+        for region_code, region_total in per_region.items():
+            if region_total < 500:
+                continue
+
+            fixed_local = int(region_total * FIXED_LOCAL_SHARE * lognormal_noise(rng, sigma=0.06))
+            fixed_national = int(
+                region_total * FIXED_NATIONAL_SHARE * lognormal_noise(rng, sigma=0.08)
+            )
+            fixed_intl_out = int(
+                region_total
+                * FIXED_INTERNATIONAL_OUTGOING_SHARE
+                * lognormal_noise(rng, sigma=0.15)
+            )
+            fixed_in_nat = int(
+                region_total * FIXED_INCOMING_NATIONAL_RATIO * lognormal_noise(rng, sigma=0.10)
+            )
+            fixed_in_intl = int(
+                region_total
+                * FIXED_INCOMING_INTERNATIONAL_RATIO
+                * lognormal_noise(rng, sigma=0.20)
+            )
+
+            rows.append(_make_row(
+                operator.operator_id, period, region_code,
+                "fixed_voice",
+                0, 0, 0, 0, 0,
+                fixed_local, fixed_national, fixed_intl_out, fixed_in_nat, fixed_in_intl,
                 source_file, line_counter, run_id,
             ))
             line_counter += 1

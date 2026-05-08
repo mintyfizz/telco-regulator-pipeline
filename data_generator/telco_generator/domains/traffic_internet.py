@@ -18,6 +18,7 @@ import numpy as np
 
 from telco_generator.constants.operators import (
     OperatorProfile,
+    get_fixed_broadband_operators,
     get_mobile_internet_market_operators,
 )
 from telco_generator.constants.regions import get_population_weights
@@ -35,6 +36,11 @@ from telco_generator.utils.time import ReportingPeriod
 
 logger = get_logger(__name__)
 
+FIXED_BROADBAND_MB_PER_SUBSCRIBER_MONTH = 42_000
+FIBER_SHARE_DEFAULT = 0.48
+ADSL_SHARE_DEFAULT = 0.22
+FIXED_WIRELESS_SHARE_DEFAULT = 0.30
+
 
 @dataclass
 class TrafficInternetRow:
@@ -48,6 +54,9 @@ class TrafficInternetRow:
     data_consumed_mb_3g: float
     data_consumed_mb_4g: float
     data_consumed_mb_5g: float | None
+    data_consumed_mb_fiber: float
+    data_consumed_mb_adsl: float
+    data_consumed_mb_fixed_wireless: float
     submitted_at: str
     _source_file: str
     _source_line: int
@@ -84,9 +93,13 @@ def _make_row(
     operator_id: str,
     period: ReportingPeriod,
     region_code: str,
+    service_segment: str,
     mb_2g: float,
     mb_3g: float,
     mb_4g: float,
+    mb_fiber: float,
+    mb_adsl: float,
+    mb_fixed_wireless: float,
     source_file: str,
     source_line: int,
     run_id: str,
@@ -96,10 +109,13 @@ def _make_row(
         "operator_id": operator_id,
         "report_period": period.period_str,
         "region_code": region_code,
-        "service_segment": "mobile",
+        "service_segment": service_segment,
         "data_consumed_mb_2g": mb_2g,
         "data_consumed_mb_3g": mb_3g,
         "data_consumed_mb_4g": mb_4g,
+        "data_consumed_mb_fiber": mb_fiber,
+        "data_consumed_mb_adsl": mb_adsl,
+        "data_consumed_mb_fixed_wireless": mb_fixed_wireless,
     }
     return TrafficInternetRow(
         bronze_id=str(uuid.uuid4()),
@@ -107,11 +123,14 @@ def _make_row(
         operator_id=operator_id,
         report_period=period.period_str,
         region_code=region_code,
-        service_segment="mobile",
+        service_segment=service_segment,
         data_consumed_mb_2g=round(mb_2g, 3),
         data_consumed_mb_3g=round(mb_3g, 3),
         data_consumed_mb_4g=round(mb_4g, 3),
         data_consumed_mb_5g=None,  # 5G not yet deployed in Congo
+        data_consumed_mb_fiber=round(mb_fiber, 3),
+        data_consumed_mb_adsl=round(mb_adsl, 3),
+        data_consumed_mb_fixed_wireless=round(mb_fixed_wireless, 3),
         submitted_at=period.submission_timestamp().isoformat(),
         _source_file=source_file,
         _source_line=source_line,
@@ -156,7 +175,50 @@ def generate_traffic_internet_for_period(
 
             rows.append(_make_row(
                 op_id, period, region_code,
+                "mobile",
                 mb_2g, mb_3g, mb_4g,
+                0, 0, 0,
+                source_file, line_counter, run_id,
+            ))
+            line_counter += 1
+
+    for operator in get_fixed_broadband_operators():
+        subscriber_anchor = operator.isp_subscribers_2024 or operator.fixed_subscribers_2024
+        subscriber_count = (
+            subscriber_anchor
+            * ((1 + operator.internet_growth_rate_annual) ** (period.year - 2024))
+        )
+        monthly_total = (
+            subscriber_count
+            * FIXED_BROADBAND_MB_PER_SUBSCRIBER_MONTH
+            * seasonal_factor(period.month, amplitude=0.04)
+            * operator.arpu_premium_factor
+        )
+        per_region = _allocate_to_regions(monthly_total, rng)
+
+        fiber_share = min(FIBER_SHARE_DEFAULT * operator.qos_quality_factor, 0.72)
+        adsl_share = ADSL_SHARE_DEFAULT if operator.is_state_owned else 0.08
+        fixed_wireless_share = max(1.0 - fiber_share - adsl_share, 0.05)
+        share_total = fiber_share + adsl_share + fixed_wireless_share
+        fiber_share /= share_total
+        adsl_share /= share_total
+        fixed_wireless_share /= share_total
+
+        for region_code, region_total in per_region.items():
+            if region_total < 1000:
+                continue
+
+            mb_fiber = region_total * fiber_share * lognormal_noise(rng, sigma=0.08)
+            mb_adsl = region_total * adsl_share * lognormal_noise(rng, sigma=0.12)
+            mb_fixed_wireless = (
+                region_total * fixed_wireless_share * lognormal_noise(rng, sigma=0.15)
+            )
+
+            rows.append(_make_row(
+                operator.operator_id, period, region_code,
+                "fixed_broadband",
+                0, 0, 0,
+                mb_fiber, mb_adsl, mb_fixed_wireless,
                 source_file, line_counter, run_id,
             ))
             line_counter += 1

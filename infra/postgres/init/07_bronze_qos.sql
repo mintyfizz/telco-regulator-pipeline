@@ -38,17 +38,27 @@ CREATE TABLE bronze.qos (
     -- Customer-side signal.
     qos_related_complaints              INTEGER,
 
+    -- Fixed service quality metrics. NULL where not applicable.
+    avg_fixed_download_mbps             NUMERIC(8, 3),
+    avg_fixed_upload_mbps               NUMERIC(8, 3),
+    avg_packet_loss_pct                 NUMERIC(6, 3),
+    fixed_broadband_coverage_pct        NUMERIC(6, 3),
+    fixed_service_repair_time_hours     NUMERIC(8, 3),
+
     submitted_at                        TIMESTAMPTZ,
 
     _source_file                        TEXT            NOT NULL,
     _source_line                        INTEGER         NOT NULL,
     _loaded_at                          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     _loaded_by_run_id                   UUID            NOT NULL,
-    _raw_payload                        JSONB           NOT NULL
+    _raw_payload                        JSONB           NOT NULL,
+
+    CONSTRAINT fk_bronze_qos_run
+        FOREIGN KEY (_loaded_by_run_id) REFERENCES audit.pipeline_runs(run_id)
 );
 
-CREATE INDEX idx_bronze_qos_operator_period
-    ON bronze.qos (operator_id, report_period);
+CREATE INDEX idx_bronze_qos_segment_operator_period_region
+    ON bronze.qos (service_segment, operator_id, report_period, region_code);
 
 CREATE INDEX idx_bronze_qos_methodology
     ON bronze.qos (measurement_methodology);
@@ -66,10 +76,13 @@ COMMENT ON TABLE bronze.qos IS
 'Raw Quality of Service measurements. The most adversarial domain in regulator data.';
 
 COMMENT ON COLUMN bronze.qos.service_segment IS
-'Top-level operator segment: mobile, fixed_voice, fixed_broadband, postal, satellite. v1 populates mobile only; remaining segments roadmapped for v1.1+.';
+'Top-level operator segment: mobile, fixed_voice, fixed_broadband, postal, satellite. Current generator populates mobile, fixed_voice, and fixed_broadband QoS rows.';
 
 COMMENT ON COLUMN bronze.qos.measurement_methodology IS
 'How this measurement was obtained: operator_self_reported (lowest trust), regulator_audit, independent_drive_test (highest trust).';
 
 COMMENT ON COLUMN bronze.qos.period_type IS
 'Granularity of measurement: monthly, weekly, daily, realtime. Defaults to monthly.';
+
+COMMENT ON COLUMN bronze.qos.avg_fixed_download_mbps IS
+'Average fixed broadband download throughput. Populated for fixed_broadband segment rows.';

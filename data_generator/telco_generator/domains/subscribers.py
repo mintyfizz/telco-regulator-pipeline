@@ -21,6 +21,8 @@ import numpy as np
 
 from telco_generator.constants.operators import (
     OperatorProfile,
+    get_fixed_broadband_operators,
+    get_fixed_voice_operators,
     get_mobile_internet_market_operators,
     get_mobile_market_operators,
 )
@@ -50,6 +52,8 @@ ARPU_TELEPHONY_BASE_2024 = 1_636  # FCFA per month
 ARPU_INTERNET_4G_BASE_2024 = 2_482
 ARPU_INTERNET_3G_BASE_2024 = 1_163
 ARPU_INTERNET_2G_BASE_2024 = 21
+ARPU_FIXED_VOICE_BASE_2024 = 7_500
+ARPU_FIXED_BROADBAND_BASE_2024 = 18_000
 
 
 @dataclass
@@ -125,8 +129,12 @@ def _arpu_for_segment(
             base = ARPU_INTERNET_3G_BASE_2024
         else:
             base = ARPU_INTERNET_2G_BASE_2024
+    elif service_category == "fixed_voice":
+        base = ARPU_FIXED_VOICE_BASE_2024
+    elif service_category == "fixed_broadband":
+        base = ARPU_FIXED_BROADBAND_BASE_2024
     else:
-        base = ARPU_TELEPHONY_BASE_2024 * 0.6  # ISP/fixed approximation
+        base = ARPU_TELEPHONY_BASE_2024
 
     # ARPU has been declining over time — apply a small annual decline.
     years_from_2024 = 2024 - period.year
@@ -144,6 +152,7 @@ def _make_row(
     operator_id: str,
     period: ReportingPeriod,
     region_code: str,
+    service_segment: str,
     service_category: str,
     payment_type: str,
     technology_generation: str | None,
@@ -168,7 +177,7 @@ def _make_row(
         "operator_id": operator_id,
         "report_period": period.period_str,
         "region_code": region_code,
-        "service_segment": "mobile",
+        "service_segment": service_segment,
         "service_category": service_category,
         "payment_type": payment_type,
         "technology_generation": technology_generation,
@@ -185,7 +194,7 @@ def _make_row(
         operator_id=operator_id,
         report_period=period.period_str,
         region_code=region_code,
-        service_segment="mobile",
+        service_segment=service_segment,
         service_category=service_category,
         payment_type=payment_type,
         technology_generation=technology_generation,
@@ -264,6 +273,7 @@ def generate_subscribers_for_period(
                 )
                 rows.append(_make_row(
                     operator_id, period, region_code,
+                    "mobile",
                     "mobile_telephony", payment_type, None,
                     seg_total, arpu, rng,
                     source_file, line_counter, run_id,
@@ -297,11 +307,55 @@ def generate_subscribers_for_period(
                     )
                     rows.append(_make_row(
                         operator_id, period, region_code,
+                        "mobile",
                         "mobile_internet", payment_type, tech,
                         seg_total, arpu, rng,
                         source_file, line_counter, run_id,
                     ))
                     line_counter += 1
+
+    # Fixed voice: one state-owned fixed operator, mostly postpaid.
+    for operator in get_fixed_voice_operators():
+        operator_total = int(
+            operator.fixed_subscribers_2024
+            * ((1 + operator.mobile_growth_rate_annual) ** (period.year - 2024))
+            * seasonal_factor(period.month, amplitude=0.01)
+        )
+        fixed_by_region = _allocate_to_regions(operator_total, rng)
+        for region_code, region_total in fixed_by_region.items():
+            if region_total < 20:
+                continue
+            arpu = _arpu_for_segment("fixed_voice", None, period, operator, rng)
+            rows.append(_make_row(
+                operator.operator_id, period, region_code,
+                "fixed_voice",
+                "fixed_voice", "postpaid", None,
+                region_total, arpu, rng,
+                source_file, line_counter, run_id,
+            ))
+            line_counter += 1
+
+    # Fixed broadband: state fixed operator plus ISP operators.
+    for operator in get_fixed_broadband_operators():
+        anchor = operator.isp_subscribers_2024 or operator.fixed_subscribers_2024
+        operator_total = int(
+            anchor
+            * ((1 + operator.internet_growth_rate_annual) ** (period.year - 2024))
+            * seasonal_factor(period.month, amplitude=0.015)
+        )
+        broadband_by_region = _allocate_to_regions(operator_total, rng)
+        for region_code, region_total in broadband_by_region.items():
+            if region_total < 20:
+                continue
+            arpu = _arpu_for_segment("fixed_broadband", None, period, operator, rng)
+            rows.append(_make_row(
+                operator.operator_id, period, region_code,
+                "fixed_broadband",
+                "fixed_broadband", "postpaid", None,
+                region_total, arpu, rng,
+                source_file, line_counter, run_id,
+            ))
+            line_counter += 1
 
     logger.info(
         "generated_subscribers",

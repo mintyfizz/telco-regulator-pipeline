@@ -13,6 +13,31 @@ Telecom regulators manage critical national data flows: subscriber counts, voice
 
 This project models what a modern regulatory data platform can look like using a local open-source stack. It is calibrated to a realistic Republic of Congo telecom market structure, but all operator names and generated submissions are fictional.
 
+## Scope and Calibration
+
+This project implements a regulator-side data platform for the Congolese telecommunications sector. ARPCE-style regulatory scope covers multiple operator segments; this implementation currently models three:
+
+| Segment | Operators in v1 | Calibration source |
+|---|---|---|
+| Mobile | OPA01, OPA02 | ARPCE 2024-style published mobile market reports |
+| Fixed voice | OPA03 | Synthetic estimate, not externally calibrated |
+| Fixed broadband | OPA03-OPA07 | Synthetic estimate, not externally calibrated |
+
+The mobile segment is calibrated against published-style 2024 mobile telephony and mobile internet anchors. Generated subscriber counts, traffic volumes, and revenue figures are designed to stay close to those market totals.
+
+The fixed voice and fixed broadband segments are architecturally complete but empirically uncalibrated. They use internally consistent synthetic values so the platform can exercise realistic multi-segment intake, validation, and analytics flows without pretending those fixed-segment numbers came from public reports.
+
+This asymmetry is intentional: the architecture supports multi-segment regulation, while the data quality reflects the available calibration evidence.
+
+### Segment Roadmap
+
+- [x] Mobile - calibrated to ARPCE-style 2024 mobile market anchors
+- [x] Fixed voice and fixed broadband - synthetic, architecturally complete
+- [ ] Calibrate fixed segments against ITU or World Bank ICT indicators
+- [ ] Postal segment
+- [ ] Satellite segment
+- [ ] Cybersecurity incident reporting across segments
+
 ## Project Status
 
 Implemented now:
@@ -21,7 +46,7 @@ Implemented now:
 - PostgreSQL medallion schemas: `bronze`, `silver`, `gold`, and `audit`.
 - Bronze tables for subscribers, voice traffic, SMS traffic, internet traffic, QoS, and revenue.
 - Silver reference data for 7 fictional operators and 15 Congolese departments.
-- Synthetic data generator for monthly 2020-2024 regulatory submissions.
+- Synthetic data generator for monthly 2020-2024 regulatory submissions across mobile, fixed voice, and fixed broadband segments.
 - MinIO upload flow using segment-aware object paths.
 - Airflow bronze ingestion DAGs with audit logging and processed/quarantine file movement.
 
@@ -41,22 +66,30 @@ The generator produces monthly CSV submissions across six regulatory domains:
 | Domain | Bronze table | Grain |
 |---|---|---|
 | Subscribers | `bronze.subscribers` | operator, period, department, service segment |
-| Voice traffic | `bronze.traffic_voice` | operator, period, department |
-| SMS traffic | `bronze.traffic_sms` | operator, period, department |
-| Internet traffic | `bronze.traffic_internet` | operator, period, department |
-| Quality of service | `bronze.qos` | operator, period, department |
-| Revenue | `bronze.revenue` | operator, period |
+| Voice traffic | `bronze.traffic_voice` | operator, period, department, service segment |
+| SMS traffic | `bronze.traffic_sms` | operator, period, department, mobile segment |
+| Internet traffic | `bronze.traffic_internet` | operator, period, department, service segment |
+| Quality of service | `bronze.qos` | operator, period, department, service segment |
+| Revenue | `bronze.revenue` | operator, period, service segment |
+
+Covered service segments:
+
+| Segment | Operators | Domains |
+|---|---:|---|
+| `mobile` | 2 | subscribers, voice, SMS, internet, QoS, revenue |
+| `fixed_voice` | 1 | subscribers, voice, QoS, revenue |
+| `fixed_broadband` | 5 | subscribers, internet, QoS, revenue |
 
 For a full 2020-2024 run, expected row counts are:
 
 | Domain | Rows |
 |---|---:|
-| `subscribers` | 14,400 |
-| `traffic_voice` | 1,800 |
+| `subscribers` | 19,800 |
+| `traffic_voice` | 2,700 |
 | `traffic_sms` | 1,800 |
-| `traffic_internet` | 1,800 |
-| `qos` | 1,800 |
-| `revenue` | 120 |
+| `traffic_internet` | 6,300 |
+| `qos` | 7,200 |
+| `revenue` | 480 |
 
 Late-2024 generated values are calibrated around these anchors:
 
@@ -65,6 +98,7 @@ Late-2024 generated values are calibrated around these anchors:
 - About 508M outgoing voice minutes per month.
 - About 7.6B mobile internet MB per month.
 - About 16B XAF total monthly revenue.
+- Fixed voice and fixed broadband submissions are synthetic but segment-aware, so non-mobile operators do not submit mobile-only SMS or mobile radio metrics.
 
 ## Architecture
 
@@ -109,6 +143,7 @@ The silver reference layer currently seeds:
 
 - 7 fictional telecom operators: 2 mobile operators, 1 state-owned fixed operator, and 4 ISPs.
 - 15 Congolese departments with 2023 population, area, density, zone, and urban-concentration flags.
+- Service-segment licensing for each operator: `mobile`, `fixed_voice`, or `fixed_broadband`.
 
 ## Quick Start
 
@@ -169,21 +204,24 @@ uv run telco-generate upload --output-dir output/
 The upload command writes segment-aware object keys:
 
 ```text
-landing/mobile/<operator_id>/<domain>/<year>/<month>/<domain>_<period>.csv
+landing/<service_segment>/<operator_id>/<domain>/<year>/<month>/<domain>_<period>.csv
 ```
 
 Run the bronze ingestion DAGs:
 
 ```bash
-docker exec telco_airflow_scheduler airflow dags test bronze_subscribers_ingestion 2026-05-07
-docker exec telco_airflow_scheduler airflow dags test bronze_mobile_domains_ingestion 2026-05-08
+docker exec telco_airflow_scheduler airflow dags unpause bronze_subscribers_ingestion
+docker exec telco_airflow_scheduler airflow dags unpause bronze_segment_domains_ingestion
+
+docker exec telco_airflow_scheduler airflow dags trigger bronze_subscribers_ingestion
+docker exec telco_airflow_scheduler airflow dags trigger bronze_segment_domains_ingestion
 ```
 
 After a successful full ingestion, expected storage state is:
 
 ```text
 landing:    0 objects
-processed:  720 objects
+processed:  2,160 objects
 quarantine: 0 objects
 ```
 

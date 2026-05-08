@@ -1,4 +1,4 @@
-.PHONY: help up down logs ps clean test lint format
+.PHONY: help up down logs ps clean test lint format migrate
 
 help:
 	@echo "Available commands:"
@@ -10,6 +10,7 @@ help:
 	@echo "  make test      - Run pytest tests"
 	@echo "  make lint      - Lint Python code with ruff"
 	@echo "  make format    - Format Python code with ruff"
+	@echo "  make migrate   - Apply Postgres migrations in order"
 
 up:
 	docker compose up -d
@@ -35,3 +36,10 @@ lint:
 
 format:
 	ruff format .
+
+migrate:
+	@for f in infra/postgres/migrations/*.sql; do \
+		echo "Applying $$f..."; \
+		docker exec -i telco_postgres psql -U telco_admin -d telco_warehouse < $$f || exit 1; \
+	done
+	@echo "All migrations applied."

@@ -1,4 +1,4 @@
-"""Airflow DAG that ingests segmented subscriber CSVs into bronze.subscribers."""
+"""Airflow DAG that ingests segmented measurement CSVs into bronze tables."""
 
 from __future__ import annotations
 
@@ -7,14 +7,16 @@ from typing import Any
 
 from airflow.decorators import dag, task
 from airflow.operators.python import get_current_context
-from lib.subscribers_ingestion import (
-    discover_subscriber_files,
-    finish_subscribers_run,
-    process_subscriber_file,
-    start_subscribers_run,
+from lib.segment_domain_ingestion import (
+    DOMAIN_CONFIGS,
+    discover_segment_domain_files,
+    finish_segment_domains_run,
+    process_segment_domain_file,
+    start_segment_domains_run,
 )
 
-DAG_ID = "bronze_subscribers_ingestion"
+DAG_ID = "bronze_segment_domains_ingestion"
+DOMAINS = sorted(DOMAIN_CONFIGS)
 BATCH_SIZE = 250
 
 
@@ -28,21 +30,21 @@ def _chunked(items: list[str], size: int) -> list[list[str]]:
     schedule=None,
     catchup=False,
     max_active_runs=1,
-    tags=["bronze", "subscribers", "segmented", "ingestion"],
+    tags=["bronze", "segmented", "ingestion"],
 )
-def bronze_subscribers_ingestion_dag() -> None:
-    """Load structurally valid subscriber submissions into bronze."""
+def bronze_segment_domains_ingestion_dag() -> None:
+    """Load structurally valid traffic, QoS, and revenue submissions."""
 
     @task
     def start_run() -> str:
         context = get_current_context()
         dag_run = context.get("dag_run")
         run_type = str(getattr(dag_run, "run_type", "scheduled"))
-        return start_subscribers_run(DAG_ID, run_type=run_type)
+        return start_segment_domains_run(DAG_ID, run_type=run_type)
 
     @task
     def discover_files(pipeline_run_id: str) -> list[dict[str, Any]]:
-        file_keys = discover_subscriber_files()
+        file_keys = discover_segment_domain_files(DOMAINS)
         return [
             {"file_keys": batch, "pipeline_run_id": pipeline_run_id}
             for batch in _chunked(file_keys, BATCH_SIZE)
@@ -51,7 +53,7 @@ def bronze_subscribers_ingestion_dag() -> None:
     @task
     def process_file_batch(file_keys: list[str], pipeline_run_id: str) -> list[dict[str, Any]]:
         return [
-            process_subscriber_file(file_key=file_key, run_id=pipeline_run_id)
+            process_segment_domain_file(file_key=file_key, run_id=pipeline_run_id)
             for file_key in file_keys
         ]
 
@@ -65,7 +67,7 @@ def bronze_subscribers_ingestion_dag() -> None:
             for batch_results in (results or [])
             for result in (batch_results or [])
         ]
-        return finish_subscribers_run(run_id=pipeline_run_id, results=flattened)
+        return finish_segment_domains_run(run_id=pipeline_run_id, results=flattened)
 
     pipeline_run_id = start_run()
     batches = discover_files(pipeline_run_id)
@@ -73,4 +75,4 @@ def bronze_subscribers_ingestion_dag() -> None:
     finish_run(pipeline_run_id, results)
 
 
-bronze_subscribers_ingestion_dag()
+bronze_segment_domains_ingestion_dag()

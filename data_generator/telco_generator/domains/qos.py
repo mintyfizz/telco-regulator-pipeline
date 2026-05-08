@@ -23,7 +23,11 @@ from datetime import datetime
 
 import numpy as np
 
-from telco_generator.constants.operators import get_mobile_operators
+from telco_generator.constants.operators import (
+    get_fixed_broadband_operators,
+    get_fixed_voice_operators,
+    get_mobile_operators,
+)
 from telco_generator.constants.regions import REGIONS
 from telco_generator.utils.logging import get_logger
 from telco_generator.utils.noise import normal_noise
@@ -63,16 +67,21 @@ class QosRow:
     service_segment: str
     measurement_methodology: str
     period_type: str
-    network_availability_pct: float
-    call_drop_rate_pct: float
-    call_setup_success_rate_pct: float
-    avg_data_throughput_mbps_4g: float
-    avg_data_throughput_mbps_3g: float
-    avg_latency_ms: int
-    population_coverage_pct_4g: float
-    population_coverage_pct_3g: float
-    population_coverage_pct_2g: float
+    network_availability_pct: float | None
+    call_drop_rate_pct: float | None
+    call_setup_success_rate_pct: float | None
+    avg_data_throughput_mbps_4g: float | None
+    avg_data_throughput_mbps_3g: float | None
+    avg_latency_ms: int | None
+    population_coverage_pct_4g: float | None
+    population_coverage_pct_3g: float | None
+    population_coverage_pct_2g: float | None
     qos_related_complaints: int
+    avg_fixed_download_mbps: float | None
+    avg_fixed_upload_mbps: float | None
+    avg_packet_loss_pct: float | None
+    fixed_broadband_coverage_pct: float | None
+    fixed_service_repair_time_hours: float | None
     submitted_at: str
     _source_file: str
     _source_line: int
@@ -185,6 +194,11 @@ def generate_qos_for_period(
                 "population_coverage_pct_3g": round(coverage_3g, 3),
                 "population_coverage_pct_2g": round(coverage_2g, 3),
                 "qos_related_complaints": complaints,
+                "avg_fixed_download_mbps": None,
+                "avg_fixed_upload_mbps": None,
+                "avg_packet_loss_pct": None,
+                "fixed_broadband_coverage_pct": None,
+                "fixed_service_repair_time_hours": None,
                 "_gamed": is_gamed,  # debugging marker, not in actual schema
             }
 
@@ -207,6 +221,151 @@ def generate_qos_for_period(
                 population_coverage_pct_3g=round(coverage_3g, 3),
                 population_coverage_pct_2g=round(coverage_2g, 3),
                 qos_related_complaints=complaints,
+                avg_fixed_download_mbps=None,
+                avg_fixed_upload_mbps=None,
+                avg_packet_loss_pct=None,
+                fixed_broadband_coverage_pct=None,
+                fixed_service_repair_time_hours=None,
+                submitted_at=period.submission_timestamp().isoformat(),
+                _source_file=source_file,
+                _source_line=line_counter,
+                _loaded_at=datetime.now().isoformat(),
+                _loaded_by_run_id=run_id,
+                _raw_payload=json.dumps(raw_payload),
+            ))
+            line_counter += 1
+
+    for operator in get_fixed_voice_operators():
+        for region_code, region in REGIONS.items():
+            is_urban = region.is_urban_concentration
+            availability = (98.7 if is_urban else 94.5) * operator.qos_quality_factor
+            repair_hours = (18 if is_urban else 72) / max(operator.qos_quality_factor, 0.1)
+            complaints = int((100 - availability) * region.population_2023 / 900_000)
+
+            availability *= normal_noise(rng, sigma=0.006)
+            repair_hours *= normal_noise(rng, sigma=0.20)
+            complaints = max(0, int(complaints * normal_noise(rng, sigma=0.30)))
+            methodology = (
+                "operator_self_reported"
+                if rng.random() < 0.85
+                else "regulator_audit"
+            )
+
+            submission_id = f"QOS-{operator.operator_id}-{period.period_str}-{region_code}-FIXV"
+            raw_payload = {
+                "operator_id": operator.operator_id,
+                "report_period": period.period_str,
+                "region_code": region_code,
+                "service_segment": "fixed_voice",
+                "measurement_methodology": methodology,
+                "period_type": "monthly",
+                "network_availability_pct": round(min(max(availability, 80.0), 99.99), 3),
+                "fixed_service_repair_time_hours": round(repair_hours, 3),
+                "qos_related_complaints": complaints,
+            }
+
+            rows.append(QosRow(
+                bronze_id=str(uuid.uuid4()),
+                source_submission_id=submission_id,
+                operator_id=operator.operator_id,
+                report_period=period.period_str,
+                region_code=region_code,
+                service_segment="fixed_voice",
+                measurement_methodology=methodology,
+                period_type="monthly",
+                network_availability_pct=round(min(max(availability, 80.0), 99.99), 3),
+                call_drop_rate_pct=None,
+                call_setup_success_rate_pct=None,
+                avg_data_throughput_mbps_4g=None,
+                avg_data_throughput_mbps_3g=None,
+                avg_latency_ms=None,
+                population_coverage_pct_4g=None,
+                population_coverage_pct_3g=None,
+                population_coverage_pct_2g=None,
+                qos_related_complaints=complaints,
+                avg_fixed_download_mbps=None,
+                avg_fixed_upload_mbps=None,
+                avg_packet_loss_pct=None,
+                fixed_broadband_coverage_pct=None,
+                fixed_service_repair_time_hours=round(repair_hours, 3),
+                submitted_at=period.submission_timestamp().isoformat(),
+                _source_file=source_file,
+                _source_line=line_counter,
+                _loaded_at=datetime.now().isoformat(),
+                _loaded_by_run_id=run_id,
+                _raw_payload=json.dumps(raw_payload),
+            ))
+            line_counter += 1
+
+    for operator in get_fixed_broadband_operators():
+        for region_code, region in REGIONS.items():
+            is_urban = region.is_urban_concentration
+            quality = operator.qos_quality_factor
+            availability = (99.0 if is_urban else 95.0) * quality
+            download = (85.0 if is_urban else 22.0) * quality * operator.arpu_premium_factor
+            upload = download * (0.38 if operator.is_state_owned else 0.55)
+            latency = int((24 if is_urban else 70) / max(quality, 0.1))
+            packet_loss = (0.4 if is_urban else 1.8) / max(quality, 0.1)
+            coverage = (76.0 if is_urban else 18.0) * quality
+            repair_hours = (12 if is_urban else 48) / max(quality, 0.1)
+
+            availability *= normal_noise(rng, sigma=0.006)
+            download *= normal_noise(rng, sigma=0.18)
+            upload *= normal_noise(rng, sigma=0.20)
+            packet_loss *= normal_noise(rng, sigma=0.25)
+            coverage *= normal_noise(rng, sigma=0.08)
+            repair_hours *= normal_noise(rng, sigma=0.25)
+            complaints = int((100 - availability) * region.population_2023 / 700_000)
+            complaints = max(0, int(complaints * normal_noise(rng, sigma=0.35)))
+
+            methodology = (
+                "operator_self_reported"
+                if rng.random() < 0.85
+                else "regulator_audit"
+            )
+
+            submission_id = f"QOS-{operator.operator_id}-{period.period_str}-{region_code}-FIXB"
+            raw_payload = {
+                "operator_id": operator.operator_id,
+                "report_period": period.period_str,
+                "region_code": region_code,
+                "service_segment": "fixed_broadband",
+                "measurement_methodology": methodology,
+                "period_type": "monthly",
+                "network_availability_pct": round(min(max(availability, 80.0), 99.99), 3),
+                "avg_fixed_download_mbps": round(max(download, 1.0), 3),
+                "avg_fixed_upload_mbps": round(max(upload, 0.5), 3),
+                "avg_latency_ms": latency,
+                "avg_packet_loss_pct": round(min(max(packet_loss, 0.05), 12.0), 3),
+                "fixed_broadband_coverage_pct": round(min(max(coverage, 1.0), 99.5), 3),
+                "fixed_service_repair_time_hours": round(repair_hours, 3),
+                "qos_related_complaints": complaints,
+            }
+
+            rows.append(QosRow(
+                bronze_id=str(uuid.uuid4()),
+                source_submission_id=submission_id,
+                operator_id=operator.operator_id,
+                report_period=period.period_str,
+                region_code=region_code,
+                service_segment="fixed_broadband",
+                measurement_methodology=methodology,
+                period_type="monthly",
+                network_availability_pct=round(min(max(availability, 80.0), 99.99), 3),
+                call_drop_rate_pct=None,
+                call_setup_success_rate_pct=None,
+                avg_data_throughput_mbps_4g=None,
+                avg_data_throughput_mbps_3g=None,
+                avg_latency_ms=latency,
+                population_coverage_pct_4g=None,
+                population_coverage_pct_3g=None,
+                population_coverage_pct_2g=None,
+                qos_related_complaints=complaints,
+                avg_fixed_download_mbps=round(max(download, 1.0), 3),
+                avg_fixed_upload_mbps=round(max(upload, 0.5), 3),
+                avg_packet_loss_pct=round(min(max(packet_loss, 0.05), 12.0), 3),
+                fixed_broadband_coverage_pct=round(min(max(coverage, 1.0), 99.5), 3),
+                fixed_service_repair_time_hours=round(repair_hours, 3),
                 submitted_at=period.submission_timestamp().isoformat(),
                 _source_file=source_file,
                 _source_line=line_counter,
