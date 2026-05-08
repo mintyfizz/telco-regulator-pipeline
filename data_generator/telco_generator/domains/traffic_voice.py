@@ -47,6 +47,7 @@ class TrafficVoiceRow:
     operator_id: str
     report_period: str
     region_code: str
+    service_segment: str
     voice_minutes_outgoing_onnet: int
     voice_minutes_outgoing_offnet: int
     voice_minutes_outgoing_international: int
@@ -103,6 +104,7 @@ def _make_row(
         "operator_id": operator_id,
         "report_period": period.period_str,
         "region_code": region_code,
+        "service_segment": "mobile",
         "voice_minutes_outgoing_onnet": onnet,
         "voice_minutes_outgoing_offnet": offnet,
         "voice_minutes_outgoing_international": intl_out,
@@ -115,6 +117,7 @@ def _make_row(
         operator_id=operator_id,
         report_period=period.period_str,
         region_code=region_code,
+        service_segment="mobile",
         voice_minutes_outgoing_onnet=onnet,
         voice_minutes_outgoing_offnet=offnet,
         voice_minutes_outgoing_international=intl_out,

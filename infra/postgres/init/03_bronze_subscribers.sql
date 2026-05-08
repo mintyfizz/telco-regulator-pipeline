@@ -22,7 +22,10 @@ CREATE TABLE bronze.subscribers (
     report_period               VARCHAR(7),
     region_code                 VARCHAR(8),
 
-    -- Three-dimensional service segmentation.
+    -- Service segment — broadest classification. v1 only populates 'mobile'.
+    service_segment             VARCHAR(30)     NOT NULL DEFAULT 'mobile',
+
+    -- Three-dimensional service segmentation within a segment.
     service_category            VARCHAR(30),
     payment_type                VARCHAR(20),
     technology_generation       VARCHAR(10),
@@ -50,6 +53,9 @@ CREATE INDEX idx_bronze_subscribers_operator_period
 CREATE INDEX idx_bronze_subscribers_category
     ON bronze.subscribers (service_category, technology_generation);
 
+CREATE INDEX idx_bronze_subscribers_segment
+    ON bronze.subscribers (service_segment);
+
 CREATE INDEX idx_bronze_subscribers_loaded_at
     ON bronze.subscribers (_loaded_at);
 
@@ -58,6 +64,9 @@ CREATE INDEX idx_bronze_subscribers_run
 
 COMMENT ON TABLE bronze.subscribers IS
 'Raw subscriber data submissions from operators. Segmented by service_category, payment_type, and (for internet) technology_generation.';
+
+COMMENT ON COLUMN bronze.subscribers.service_segment IS
+'Top-level operator segment: mobile, fixed_voice, fixed_broadband, postal, satellite. v1 populates mobile only; remaining segments roadmapped for v1.1+.';
 
 COMMENT ON COLUMN bronze.subscribers.service_category IS
 'Type of service: mobile_telephony, mobile_internet, fixed_voice, fixed_broadband.';

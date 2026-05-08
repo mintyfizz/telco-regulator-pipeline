@@ -68,6 +68,7 @@ class RevenueRow:
     source_submission_id: str
     operator_id: str
     report_period: str
+    service_segment: str
     revenue_voice_outgoing_onnet_xaf: int
     revenue_voice_outgoing_offnet_xaf: int
     revenue_voice_outgoing_international_xaf: int
@@ -193,6 +194,7 @@ def generate_revenue_for_period(
         raw_payload = {
             "operator_id": op_id,
             "report_period": period.period_str,
+            "service_segment": "mobile",
             "total_revenue_xaf": total,
         }
 
@@ -201,6 +203,7 @@ def generate_revenue_for_period(
             source_submission_id=submission_id,
             operator_id=op_id,
             report_period=period.period_str,
+            service_segment="mobile",
             revenue_voice_outgoing_onnet_xaf=rev_voice_onnet,
             revenue_voice_outgoing_offnet_xaf=rev_voice_offnet,
             revenue_voice_outgoing_international_xaf=rev_voice_intl_out,

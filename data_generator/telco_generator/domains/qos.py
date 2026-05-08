@@ -23,7 +23,7 @@ from datetime import datetime
 
 import numpy as np
 
-from telco_generator.constants.operators import OPERATORS
+from telco_generator.constants.operators import get_mobile_operators
 from telco_generator.constants.regions import REGIONS
 from telco_generator.utils.logging import get_logger
 from telco_generator.utils.noise import normal_noise
@@ -60,6 +60,7 @@ class QosRow:
     operator_id: str
     report_period: str
     region_code: str
+    service_segment: str
     measurement_methodology: str
     period_type: str
     network_availability_pct: float
@@ -96,7 +97,7 @@ def generate_qos_for_period(
     rows: list[QosRow] = []
     line_counter = 1
 
-    operators = list(OPERATORS.values())
+    operators = get_mobile_operators()
 
     for operator in operators:
         op_id = operator.operator_id
@@ -171,6 +172,7 @@ def generate_qos_for_period(
                 "operator_id": op_id,
                 "report_period": period.period_str,
                 "region_code": region_code,
+                "service_segment": "mobile",
                 "measurement_methodology": methodology,
                 "period_type": "monthly",
                 "network_availability_pct": round(availability, 3),
@@ -192,6 +194,7 @@ def generate_qos_for_period(
                 operator_id=op_id,
                 report_period=period.period_str,
                 region_code=region_code,
+                service_segment="mobile",
                 measurement_methodology=methodology,
                 period_type="monthly",
                 network_availability_pct=round(availability, 3),

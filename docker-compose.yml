@@ -67,11 +67,109 @@ services:
     networks:
       - telco_net
 
+  airflow_postgres:
+    image: postgres:16
+    container_name: telco_airflow_postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow_local_only
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - telco_net
+
+  airflow_init:
+    image: apache/airflow:2.10.3-python3.11
+    container_name: telco_airflow_init
+    depends_on:
+      airflow_postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow_local_only@airflow_postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: 'YlCImzjge_TeZc7jPJ7Jz3TtuFSxmd5uF8VnB-l0Q4Q='
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: admin
+    command: version
+    restart: "no"
+    networks:
+      - telco_net
+
+  airflow_webserver:
+    image: apache/airflow:2.10.3-python3.11
+    container_name: telco_airflow_webserver
+    depends_on:
+      airflow_postgres:
+        condition: service_healthy
+      airflow_init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow_local_only@airflow_postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: 'YlCImzjge_TeZc7jPJ7Jz3TtuFSxmd5uF8VnB-l0Q4Q='
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+      AIRFLOW_CONN_TELCO_WAREHOUSE: postgresql://telco_admin:changeme_local_only@postgres:5432/telco_warehouse
+      AIRFLOW_CONN_TELCO_MINIO: aws://minio_admin:changeme_local_only@/?endpoint_url=http%3A%2F%2Fminio%3A9000&region_name=us-east-1
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/requirements.txt:/requirements.txt
+    ports:
+      - "8080:8080"
+    command: bash -c "pip install -r /requirements.txt && airflow webserver"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - telco_net
+
+  airflow_scheduler:
+    image: apache/airflow:2.10.3-python3.11
+    container_name: telco_airflow_scheduler
+    depends_on:
+      airflow_postgres:
+        condition: service_healthy
+      airflow_init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow_local_only@airflow_postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: 'YlCImzjge_TeZc7jPJ7Jz3TtuFSxmd5uF8VnB-l0Q4Q='
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW_CONN_TELCO_WAREHOUSE: postgresql://telco_admin:changeme_local_only@postgres:5432/telco_warehouse
+      AIRFLOW_CONN_TELCO_MINIO: aws://minio_admin:changeme_local_only@/?endpoint_url=http%3A%2F%2Fminio%3A9000&region_name=us-east-1
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/requirements.txt:/requirements.txt
+    command: bash -c "pip install -r /requirements.txt && airflow scheduler"
+    restart: unless-stopped
+    networks:
+      - telco_net
+
 volumes:
   postgres_data:
     name: telco_postgres_data
   minio_data:
     name: telco_minio_data
+  airflow_postgres_data:
+    name: telco_airflow_postgres_data
 
 networks:
   telco_net:

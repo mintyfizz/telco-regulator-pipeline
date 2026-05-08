@@ -43,6 +43,7 @@ class TrafficInternetRow:
     operator_id: str
     report_period: str
     region_code: str
+    service_segment: str
     data_consumed_mb_2g: float
     data_consumed_mb_3g: float
     data_consumed_mb_4g: float
@@ -95,6 +96,7 @@ def _make_row(
         "operator_id": operator_id,
         "report_period": period.period_str,
         "region_code": region_code,
+        "service_segment": "mobile",
         "data_consumed_mb_2g": mb_2g,
         "data_consumed_mb_3g": mb_3g,
         "data_consumed_mb_4g": mb_4g,
@@ -105,6 +107,7 @@ def _make_row(
         operator_id=operator_id,
         report_period=period.period_str,
         region_code=region_code,
+        service_segment="mobile",
         data_consumed_mb_2g=round(mb_2g, 3),
         data_consumed_mb_3g=round(mb_3g, 3),
         data_consumed_mb_4g=round(mb_4g, 3),

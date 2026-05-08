@@ -43,6 +43,7 @@ class TrafficSmsRow:
     operator_id: str
     report_period: str
     region_code: str
+    service_segment: str
     sms_count_outgoing_onnet: int
     sms_count_outgoing_offnet: int
     sms_count_outgoing_international: int
@@ -95,6 +96,7 @@ def _make_row(
         "operator_id": operator_id,
         "report_period": period.period_str,
         "region_code": region_code,
+        "service_segment": "mobile",
         "sms_count_outgoing_onnet": onnet,
         "sms_count_outgoing_offnet": offnet,
         "sms_count_outgoing_international": intl,
@@ -106,6 +108,7 @@ def _make_row(
         operator_id=operator_id,
         report_period=period.period_str,
         region_code=region_code,
+        service_segment="mobile",
         sms_count_outgoing_onnet=onnet,
         sms_count_outgoing_offnet=offnet,
         sms_count_outgoing_international=intl,

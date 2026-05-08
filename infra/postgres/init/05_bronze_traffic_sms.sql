@@ -16,6 +16,7 @@ CREATE TABLE bronze.traffic_sms (
     operator_id                         VARCHAR(10),
     report_period                       VARCHAR(7),
     region_code                         VARCHAR(8),
+    service_segment                     VARCHAR(30)     NOT NULL DEFAULT 'mobile',
 
     -- Outgoing SMS.
     sms_count_outgoing_onnet            BIGINT,
@@ -37,6 +38,9 @@ CREATE TABLE bronze.traffic_sms (
 CREATE INDEX idx_bronze_traffic_sms_operator_period
     ON bronze.traffic_sms (operator_id, report_period);
 
+CREATE INDEX idx_bronze_traffic_sms_segment
+    ON bronze.traffic_sms (service_segment);
+
 CREATE INDEX idx_bronze_traffic_sms_loaded_at
     ON bronze.traffic_sms (_loaded_at);
 
@@ -45,3 +49,6 @@ CREATE INDEX idx_bronze_traffic_sms_run
 
 COMMENT ON TABLE bronze.traffic_sms IS
 'SMS message counts by direction and destination. Globally declining domain as OTT messaging dominates.';
+
+COMMENT ON COLUMN bronze.traffic_sms.service_segment IS
+'Top-level operator segment: mobile, fixed_voice, fixed_broadband, postal, satellite. v1 populates mobile only; remaining segments roadmapped for v1.1+.';

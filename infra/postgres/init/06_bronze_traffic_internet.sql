@@ -18,6 +18,7 @@ CREATE TABLE bronze.traffic_internet (
     operator_id                     VARCHAR(10),
     report_period                   VARCHAR(7),
     region_code                     VARCHAR(8),
+    service_segment                 VARCHAR(30)     NOT NULL DEFAULT 'mobile',
 
     -- Data consumed by technology generation, in megabytes.
     data_consumed_mb_2g             NUMERIC(18, 3),
@@ -37,6 +38,9 @@ CREATE TABLE bronze.traffic_internet (
 CREATE INDEX idx_bronze_traffic_internet_operator_period
     ON bronze.traffic_internet (operator_id, report_period);
 
+CREATE INDEX idx_bronze_traffic_internet_segment
+    ON bronze.traffic_internet (service_segment);
+
 CREATE INDEX idx_bronze_traffic_internet_loaded_at
     ON bronze.traffic_internet (_loaded_at);
 
@@ -45,6 +49,9 @@ CREATE INDEX idx_bronze_traffic_internet_run
 
 COMMENT ON TABLE bronze.traffic_internet IS
 'Mobile data consumption in megabytes, broken out by network technology generation. 5G column is nullable for markets where 5G is not yet deployed.';
+
+COMMENT ON COLUMN bronze.traffic_internet.service_segment IS
+'Top-level operator segment: mobile, fixed_voice, fixed_broadband, postal, satellite. v1 populates mobile only; remaining segments roadmapped for v1.1+.';
 
 COMMENT ON COLUMN bronze.traffic_internet.data_consumed_mb_4g IS
 'Dominant traffic category in Congo as of 2024 (75% of total). Growing 39%+ annually.';

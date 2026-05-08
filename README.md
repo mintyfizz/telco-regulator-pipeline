@@ -17,20 +17,20 @@ This project models what a modern regulatory data platform can look like using a
 
 Implemented now:
 
-- Docker Compose stack with PostgreSQL 16 and MinIO.
+- Docker Compose stack with PostgreSQL 16, MinIO, and Apache Airflow.
 - PostgreSQL medallion schemas: `bronze`, `silver`, `gold`, and `audit`.
 - Bronze tables for subscribers, voice traffic, SMS traffic, internet traffic, QoS, and revenue.
 - Silver reference data for 7 fictional operators and 15 Congolese departments.
 - Synthetic data generator for monthly 2020-2024 regulatory submissions.
+- MinIO upload flow using segment-aware object paths.
+- Airflow bronze ingestion DAGs with audit logging and processed/quarantine file movement.
 
 Next:
 
-- Upload generated CSVs into the MinIO `landing` bucket using an S3-compatible client.
+- Great Expectations validation and quarantine rules on top of bronze data.
 
 Planned:
 
-- Airflow ingestion DAGs.
-- Great Expectations validation and quarantine handling.
 - dbt silver/gold transformations.
 - Metabase dashboards for sector observatory analytics.
 
@@ -72,9 +72,9 @@ Late-2024 generated values are calibrated around these anchors:
 flowchart TB
     sources["Synthetic operator submissions<br/>CSV files by domain and month"]
     landing["MinIO landing bucket<br/>S3-compatible raw file storage"]
-    airflow["Airflow ingestion DAGs<br/>planned"]
+    airflow["Airflow ingestion DAGs<br/>load to bronze + audit"]
     bronze["PostgreSQL bronze<br/>raw rows + audit metadata"]
-    quality["Great Expectations<br/>planned validation + quarantine"]
+    quality["Great Expectations<br/>planned validation"]
     silver["PostgreSQL silver<br/>cleaned and validated models"]
     gold["PostgreSQL gold<br/>analytics-ready marts"]
     bi["Metabase dashboards<br/>planned"]
@@ -90,8 +90,8 @@ flowchart TB
     classDef implemented fill:#d8f2e3,stroke:#111827,color:#111827
     classDef planned fill:#fff6cf,stroke:#111827,color:#111827
 
-    class sources,landing,bronze implemented
-    class airflow,quality,silver,gold,bi planned
+    class sources,landing,airflow,bronze implemented
+    class quality,silver,gold,bi planned
 ```
 
 ## Data Model
@@ -138,11 +138,12 @@ Available services:
 | PostgreSQL | `localhost:5433` | `telco_admin` / `changeme_local_only` |
 | MinIO API | `localhost:9000` | `minio_admin` / `changeme_local_only` |
 | MinIO Console | `http://localhost:9001` | `minio_admin` / `changeme_local_only` |
+| Airflow UI | `http://localhost:8080` | `admin` / `admin` |
 
 Generate the full synthetic dataset:
 
 ```bash
-uv run telco-generate --start-year 2020 --end-year 2024 --output-dir output
+uv run telco-generate generate --start-year 2020 --end-year 2024 --output-dir output
 ```
 
 Generated files are written to:
@@ -158,6 +159,33 @@ output/traffic_sms/2020/2020-01.csv
 ```
 
 Generated output is ignored by git. Keep the generator code, not generated data, under version control.
+
+Upload generated files to MinIO:
+
+```bash
+uv run telco-generate upload --output-dir output/
+```
+
+The upload command writes segment-aware object keys:
+
+```text
+landing/mobile/<operator_id>/<domain>/<year>/<month>/<domain>_<period>.csv
+```
+
+Run the bronze ingestion DAGs:
+
+```bash
+docker exec telco_airflow_scheduler airflow dags test bronze_subscribers_ingestion 2026-05-07
+docker exec telco_airflow_scheduler airflow dags test bronze_mobile_domains_ingestion 2026-05-08
+```
+
+After a successful full ingestion, expected storage state is:
+
+```text
+landing:    0 objects
+processed:  720 objects
+quarantine: 0 objects
+```
 
 ## Useful Commands
 
@@ -175,13 +203,22 @@ docker compose down
 docker compose down -v
 
 # Generate synthetic data
-uv run telco-generate --start-year 2020 --end-year 2024 --output-dir output
+uv run telco-generate generate --start-year 2020 --end-year 2024 --output-dir output
+
+# Upload generated data to MinIO landing
+uv run telco-generate upload --output-dir output/
+
+# Verify MinIO object counts
+uv run telco-generate verify
+
+# Check Airflow DAG import errors
+docker exec telco_airflow_scheduler airflow dags list-import-errors
 ```
 
 ## Repository Layout
 
 ```text
-airflow/                 Airflow DAG and plugin scaffold
+airflow/                 Airflow DAGs and ingestion helper library
 data_generator/          Synthetic telecom submission generator
 dbt_project/             Future dbt models and tests
 docs/                    Design notes, decisions, screenshots
@@ -200,7 +237,7 @@ uv.lock                  Locked Python dependency resolution
 | Synthetic data | Python, NumPy, Pydantic, Click | Implemented |
 | Object storage | MinIO | Running locally |
 | Warehouse | PostgreSQL 16 | Bronze implemented |
-| Orchestration | Apache Airflow | Planned |
+| Orchestration | Apache Airflow | Bronze ingestion implemented |
 | Validation | Great Expectations | Planned |
 | Transformation | dbt-core | Planned |
 | BI | Metabase | Planned |
@@ -213,8 +250,8 @@ uv.lock                  Locked Python dependency resolution
 - [x] v0.2 - Docker Compose stack with PostgreSQL and MinIO
 - [x] v0.3 - Bronze schema, audit infrastructure, and reference data
 - [x] v0.4 - Synthetic data generator
-- [ ] v0.5 - Upload generated CSVs to MinIO landing bucket
-- [ ] v0.6 - Airflow batch ingestion DAGs
+- [x] v0.5 - Upload generated CSVs to MinIO landing bucket
+- [x] v0.6 - Airflow batch ingestion DAGs
 - [ ] v0.7 - Great Expectations validation and quarantine
 - [ ] v0.8 - dbt staging and marts models
 - [ ] v0.9 - Metabase dashboards

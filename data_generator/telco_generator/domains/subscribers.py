@@ -61,6 +61,7 @@ class SubscriberRow:
     operator_id: str
     report_period: str
     region_code: str
+    service_segment: str
     service_category: str
     payment_type: str
     technology_generation: str | None
@@ -167,6 +168,7 @@ def _make_row(
         "operator_id": operator_id,
         "report_period": period.period_str,
         "region_code": region_code,
+        "service_segment": "mobile",
         "service_category": service_category,
         "payment_type": payment_type,
         "technology_generation": technology_generation,
@@ -183,6 +185,7 @@ def _make_row(
         operator_id=operator_id,
         report_period=period.period_str,
         region_code=region_code,
+        service_segment="mobile",
         service_category=service_category,
         payment_type=payment_type,
         technology_generation=technology_generation,

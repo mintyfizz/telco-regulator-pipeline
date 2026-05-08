@@ -42,6 +42,8 @@ CREATE TABLE audit.file_ingestions (
     rows_loaded         BIGINT,
     rows_quarantined    BIGINT,
     ingested_at         TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    status              VARCHAR(20)     NOT NULL DEFAULT 'loaded',
+    error_message       TEXT,
     UNIQUE (source_bucket, source_file, run_id)
 );
 
@@ -52,4 +54,5 @@ CREATE INDEX idx_file_ingestions_run
     ON audit.file_ingestions (run_id);
 
 COMMENT ON TABLE audit.file_ingestions IS 'One row per file ingested into bronze. Enables replay and forensics.';
-COMMENT ON COLUMN audit.file_ingestions.file_checksum_sha256 IS 'Hash of file contents for integrity verification and deduplication.'; 
+COMMENT ON COLUMN audit.file_ingestions.file_checksum_sha256 IS 'Hash of file contents for integrity verification and deduplication.';
+COMMENT ON COLUMN audit.file_ingestions.status IS 'loaded | quarantined | failed'; 

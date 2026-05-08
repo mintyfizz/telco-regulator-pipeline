@@ -16,6 +16,7 @@ CREATE TABLE silver.operators (
     operator_name           VARCHAR(100)    NOT NULL,
     operator_type           VARCHAR(20)     NOT NULL
                             CHECK (operator_type IN ('mobile', 'fixed', 'isp', 'postal', 'mvno')),
+    service_segments        TEXT[]          NOT NULL DEFAULT '{}',
     license_status          VARCHAR(20)     NOT NULL DEFAULT 'active'
                             CHECK (license_status IN ('active', 'suspended', 'revoked', 'pending')),
     license_issued_date     DATE,
@@ -29,21 +30,25 @@ CREATE TABLE silver.operators (
 COMMENT ON TABLE silver.operators IS
 'Canonical fictional operator reference data. Represents a realistic Congolese telecom market structure without using real operator names.';
 
+COMMENT ON COLUMN silver.operators.service_segments IS
+'Array of segments this operator is licensed to operate in. Values: mobile, fixed_voice, fixed_broadband, postal, satellite. An operator can hold multiple segment licenses (e.g., Congo Réseau operates in fixed_voice and fixed_broadband).';
+
 INSERT INTO silver.operators (
     operator_id,
     operator_name,
     operator_type,
+    service_segments,
     license_issued_date,
     is_state_owned,
     is_mvno
 ) VALUES
-    ('OPA01', 'Mokongo Mobile',    'mobile',  '2005-04-15', FALSE, FALSE),
-    ('OPA02', 'Sangha Telecom',    'mobile',  '2007-09-22', FALSE, FALSE),
-    ('OPA03', 'Congo Réseau',      'fixed',   '2001-01-01', TRUE,  FALSE),
-    ('OPA04', 'Avenir Net',        'isp',     '2012-06-10', FALSE, FALSE),
-    ('OPA05', 'Likouala Connect',  'isp',     '2014-02-28', FALSE, FALSE),
-    ('OPA06', 'Niari Web',         'isp',     '2016-11-03', FALSE, FALSE),
-    ('OPA07', 'Plateaux Digital',  'isp',     '2018-08-17', FALSE, FALSE);
+    ('OPA01', 'Mokongo Mobile',    'mobile',  ARRAY['mobile'],                         '2005-04-15', FALSE, FALSE),
+    ('OPA02', 'Sangha Telecom',    'mobile',  ARRAY['mobile'],                         '2007-09-22', FALSE, FALSE),
+    ('OPA03', 'Congo Réseau',      'fixed',   ARRAY['fixed_voice', 'fixed_broadband'], '2001-01-01', TRUE,  FALSE),
+    ('OPA04', 'Avenir Net',        'isp',     ARRAY['fixed_broadband'],                '2012-06-10', FALSE, FALSE),
+    ('OPA05', 'Likouala Connect',  'isp',     ARRAY['fixed_broadband'],                '2014-02-28', FALSE, FALSE),
+    ('OPA06', 'Niari Web',         'isp',     ARRAY['fixed_broadband'],                '2016-11-03', FALSE, FALSE),
+    ('OPA07', 'Plateaux Digital',  'isp',     ARRAY['fixed_broadband'],                '2018-08-17', FALSE, FALSE);
 
 CREATE TABLE silver.regions (
     region_code             VARCHAR(8)      PRIMARY KEY,

@@ -2,11 +2,11 @@
 Upload generated CSV files to MinIO simulating operator submissions.
 
 The path convention is:
-    landing/<operator_id>/<domain>/<year>/<month>/<filename>.csv
+    landing/<segment>/<operator_id>/<domain>/<year>/<month>/<filename>.csv
 
-Operator ID is parsed from the CSV content itself (each domain's CSV has
-operator_id values across multiple operators in the same file). This means
-we read the CSV, split by operator, and upload separate files per operator
+Operator ID and service segment are parsed from the CSV content itself. Each
+domain CSV can contain rows across multiple operators, so we split by operator
+and upload separate files per operator
 — matching how operators would actually submit (each operator only knows
 their own data).
 """
@@ -81,15 +81,21 @@ def _rows_to_csv_bytes(rows: list[dict]) -> bytes:
 
 
 def _build_object_key(
+    service_segment: str,
     operator_id: str,
     domain: str,
     year: int,
     month: int,
 ) -> str:
-    """Build the S3 object key following our path convention."""
+    """
+    Build the S3 object key following our segment-aware path convention.
+
+    Path structure: <segment>/<operator>/<domain>/<year>/<month>/<file>.
+    This allows multi-segment expansion in v1.1+ without path collisions.
+    """
     period = f"{year:04d}-{month:02d}"
     filename = f"{domain}_{period}.csv"
-    return f"{operator_id}/{domain}/{year:04d}/{month:02d}/{filename}"
+    return f"{service_segment}/{operator_id}/{domain}/{year:04d}/{month:02d}/{filename}"
 
 
 def _parse_period_from_filename(filename: str) -> tuple[int, int]:
@@ -130,7 +136,8 @@ def upload_domain_period(
         if not rows:
             continue
 
-        key = _build_object_key(operator_id, domain, year, month)
+        service_segment = (rows[0].get("service_segment") or "mobile").strip() or "mobile"
+        key = _build_object_key(service_segment, operator_id, domain, year, month)
 
         if skip_existing and client.object_exists(LANDING_BUCKET, key):
             logger.debug("upload_skipped_exists", key=key)
@@ -150,6 +157,7 @@ def upload_domain_period(
                 temp_path = Path(tmp.name)
 
             metadata = {
+                "service-segment": service_segment,
                 "operator-id": operator_id,
                 "domain": domain,
                 "period": f"{year:04d}-{month:02d}",

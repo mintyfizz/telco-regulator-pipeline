@@ -160,17 +160,23 @@ def verify(endpoint: str, access_key: str, secret_key: str) -> None:
             click.echo(f"\nBucket '{bucket}': {len(keys):,} objects")
 
             if keys and bucket == "landing":
-                # Group by operator and domain for landing.
+                # Group by segment, operator, and domain for landing.
+                by_segment: dict[str, int] = {}
                 by_operator: dict[str, int] = {}
                 by_domain: dict[str, int] = {}
                 for key in keys:
                     parts = key.split("/")
-                    if len(parts) >= 2:
-                        op_id = parts[0]
-                        domain = parts[1]
+                    if len(parts) >= 3:
+                        segment = parts[0]
+                        op_id = parts[1]
+                        domain = parts[2]
+                        by_segment[segment] = by_segment.get(segment, 0) + 1
                         by_operator[op_id] = by_operator.get(op_id, 0) + 1
                         by_domain[domain] = by_domain.get(domain, 0) + 1
 
+                click.echo("  By segment:")
+                for segment in sorted(by_segment):
+                    click.echo(f"    {segment}: {by_segment[segment]:,}")
                 click.echo("  By operator:")
                 for op_id in sorted(by_operator):
                     click.echo(f"    {op_id}: {by_operator[op_id]:,}")

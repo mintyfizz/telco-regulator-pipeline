@@ -4,9 +4,10 @@ Operator profiles calibrated against ARPCE 2024 market reports.
 Market share weights drive subscriber/traffic/revenue distribution.
 Trajectory parameters shape 5-year evolution.
 
-The two largest operators reflect the Congolese duopoly market shape without
-using real names. Smaller licensed operators receive synthetic market-share
-weights so every operator can submit data while national totals stay fixed.
+The two largest operators reflect the Congolese mobile duopoly market shape
+without using real names. Fixed and ISP operators remain in the catalog for
+future fixed/ISP domains, but v1 mobile generators only emit submissions for
+operators with operator_type == "mobile".
 """
 
 from dataclasses import dataclass
@@ -41,10 +42,8 @@ class OperatorProfile:
 # Calibrated to ARPCE 2024 reports.
 # National totals remain 6.050M mobile telephony subscribers and 3.757M mobile
 # internet subscribers. The values below are allocation weights, not additive
-# totals; they preserve the large two-operator market shape while letting every
-# fictional licensed operator appear in generated submissions. This is a
-# synthetic reporting-participation model: license type remains separate from
-# whether an operator appears in a given generated market domain.
+# totals. For v1, mobile-specific generators use only legal mobile operators;
+# fixed/ISP operators stay available for future segment-specific generators.
 OPERATORS: dict[str, OperatorProfile] = {
     "OPA01": OperatorProfile(
         operator_id="OPA01",
@@ -161,14 +160,17 @@ def get_mobile_operators() -> list[OperatorProfile]:
 
 def get_mobile_market_operators() -> list[OperatorProfile]:
     """Return operators participating in generated mobile-market allocation."""
-    return [op for op in OPERATORS.values() if op.mobile_subscribers_2024 > 0]
+    return [
+        op for op in OPERATORS.values()
+        if op.operator_type == "mobile" and op.mobile_subscribers_2024 > 0
+    ]
 
 
 def get_mobile_internet_market_operators() -> list[OperatorProfile]:
     """Return operators participating in generated mobile-internet allocation."""
     return [
         op for op in OPERATORS.values()
-        if op.mobile_internet_subscribers_2024 > 0
+        if op.operator_type == "mobile" and op.mobile_internet_subscribers_2024 > 0
     ]
 
 

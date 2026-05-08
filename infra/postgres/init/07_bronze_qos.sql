@@ -14,6 +14,7 @@ CREATE TABLE bronze.qos (
     operator_id                         VARCHAR(10),
     report_period                       VARCHAR(7),
     region_code                         VARCHAR(8),
+    service_segment                     VARCHAR(30)     NOT NULL DEFAULT 'mobile',
 
     -- How this measurement was obtained.
     measurement_methodology             VARCHAR(40),
@@ -52,6 +53,9 @@ CREATE INDEX idx_bronze_qos_operator_period
 CREATE INDEX idx_bronze_qos_methodology
     ON bronze.qos (measurement_methodology);
 
+CREATE INDEX idx_bronze_qos_segment
+    ON bronze.qos (service_segment);
+
 CREATE INDEX idx_bronze_qos_loaded_at
     ON bronze.qos (_loaded_at);
 
@@ -60,6 +64,9 @@ CREATE INDEX idx_bronze_qos_run
 
 COMMENT ON TABLE bronze.qos IS
 'Raw Quality of Service measurements. The most adversarial domain in regulator data.';
+
+COMMENT ON COLUMN bronze.qos.service_segment IS
+'Top-level operator segment: mobile, fixed_voice, fixed_broadband, postal, satellite. v1 populates mobile only; remaining segments roadmapped for v1.1+.';
 
 COMMENT ON COLUMN bronze.qos.measurement_methodology IS
 'How this measurement was obtained: operator_self_reported (lowest trust), regulator_audit, independent_drive_test (highest trust).';

@@ -18,6 +18,7 @@ CREATE TABLE bronze.traffic_voice (
     operator_id                             VARCHAR(10),
     report_period                           VARCHAR(7),
     region_code                             VARCHAR(8),
+    service_segment                         VARCHAR(30)     NOT NULL DEFAULT 'mobile',
 
     -- Outgoing voice (calls placed by this operator's subscribers).
     voice_minutes_outgoing_onnet            BIGINT,
@@ -40,6 +41,9 @@ CREATE TABLE bronze.traffic_voice (
 CREATE INDEX idx_bronze_traffic_voice_operator_period
     ON bronze.traffic_voice (operator_id, report_period);
 
+CREATE INDEX idx_bronze_traffic_voice_segment
+    ON bronze.traffic_voice (service_segment);
+
 CREATE INDEX idx_bronze_traffic_voice_loaded_at
     ON bronze.traffic_voice (_loaded_at);
 
@@ -48,6 +52,9 @@ CREATE INDEX idx_bronze_traffic_voice_run
 
 COMMENT ON TABLE bronze.traffic_voice IS
 'Voice call minutes broken out by direction (outgoing/incoming) and destination (on-net/off-net/international/national).';
+
+COMMENT ON COLUMN bronze.traffic_voice.service_segment IS
+'Top-level operator segment: mobile, fixed_voice, fixed_broadband, postal, satellite. v1 populates mobile only; remaining segments roadmapped for v1.1+.';
 
 COMMENT ON COLUMN bronze.traffic_voice.voice_minutes_outgoing_onnet IS
 'Calls placed within the same operator network. Largest category in Congo (86% of outgoing in 2024).';

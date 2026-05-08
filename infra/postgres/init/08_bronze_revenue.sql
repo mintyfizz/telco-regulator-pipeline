@@ -17,6 +17,7 @@ CREATE TABLE bronze.revenue (
     source_submission_id                        TEXT,
     operator_id                                 VARCHAR(10),
     report_period                               VARCHAR(7),
+    service_segment                             VARCHAR(30)     NOT NULL DEFAULT 'mobile',
 
     -- Voice outgoing revenue (subscribers paying for calls placed).
     revenue_voice_outgoing_onnet_xaf            BIGINT,
@@ -59,6 +60,9 @@ CREATE TABLE bronze.revenue (
 CREATE INDEX idx_bronze_revenue_operator_period
     ON bronze.revenue (operator_id, report_period);
 
+CREATE INDEX idx_bronze_revenue_segment
+    ON bronze.revenue (service_segment);
+
 CREATE INDEX idx_bronze_revenue_loaded_at
     ON bronze.revenue (_loaded_at);
 
@@ -67,6 +71,9 @@ CREATE INDEX idx_bronze_revenue_run
 
 COMMENT ON TABLE bronze.revenue IS
 'Operator revenue broken out into service-line components plus totals. Source of truth for ARPU calculations and Universal Service Fund contribution tracking.';
+
+COMMENT ON COLUMN bronze.revenue.service_segment IS
+'Top-level operator segment: mobile, fixed_voice, fixed_broadband, postal, satellite. v1 populates mobile only; remaining segments roadmapped for v1.1+.';
 
 COMMENT ON COLUMN bronze.revenue.usf_contribution_xaf IS
 'Universal Service Fund contribution. Typically 1-3% of total revenue, depending on regulatory framework.';
