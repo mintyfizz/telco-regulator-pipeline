@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
+from telco_generator.anomalies import apply_controlled_anomalies
 from telco_generator.config import GeneratorConfig
 from telco_generator.domains import (
     qos,
@@ -21,7 +22,11 @@ from telco_generator.domains import (
     traffic_voice,
 )
 from telco_generator.utils.logging import get_logger
-from telco_generator.utils.time import ReportingPeriod, generate_periods
+from telco_generator.utils.time import (
+    ReportingPeriod,
+    generate_periods,
+    parse_reporting_period,
+)
 
 logger = get_logger(__name__)
 
@@ -47,6 +52,23 @@ def _output_path(base: Path, domain: str, period: ReportingPeriod) -> Path:
     return base / domain / str(period.year) / f"{period.period_str}.csv"
 
 
+def _prepare_records(
+    domain: str,
+    records: list[dict],
+    rng: np.random.Generator,
+    anomaly_rate: float,
+) -> list[dict]:
+    anomaly_count = apply_controlled_anomalies(domain, records, rng, anomaly_rate)
+    if anomaly_count:
+        logger.warning(
+            "controlled_anomalies_injected",
+            domain=domain,
+            rows=anomaly_count,
+            anomaly_rate=anomaly_rate,
+        )
+    return records
+
+
 def run_generator(config: GeneratorConfig) -> dict[str, int]:
     """
     Execute the full generation run.
@@ -55,7 +77,11 @@ def run_generator(config: GeneratorConfig) -> dict[str, int]:
     """
     rng = np.random.default_rng(seed=config.random_seed)
     run_id = str(uuid.uuid4())
-    periods = generate_periods(config.start_year, config.end_year)
+    periods = (
+        [parse_reporting_period(config.period)]
+        if config.period is not None
+        else generate_periods(config.start_year, config.end_year)
+    )
 
     logger.info(
         "starting_generation",
@@ -72,32 +98,56 @@ def run_generator(config: GeneratorConfig) -> dict[str, int]:
 
         if "subscribers" in config.domains:
             rows = subscribers.generate_subscribers_for_period(period, rng, run_id)
-            _write_csv(
+            records = _prepare_records(
+                "subscribers",
                 subscribers.rows_to_records(rows),
+                rng,
+                config.anomaly_rate,
+            )
+            _write_csv(
+                records,
                 _output_path(config.output_dir, "subscribers", period),
             )
             totals["subscribers"] += len(rows)
 
         if "traffic_voice" in config.domains:
             rows = traffic_voice.generate_traffic_voice_for_period(period, rng, run_id)
-            _write_csv(
+            records = _prepare_records(
+                "traffic_voice",
                 traffic_voice.rows_to_records(rows),
+                rng,
+                config.anomaly_rate,
+            )
+            _write_csv(
+                records,
                 _output_path(config.output_dir, "traffic_voice", period),
             )
             totals["traffic_voice"] += len(rows)
 
         if "traffic_sms" in config.domains:
             rows = traffic_sms.generate_traffic_sms_for_period(period, rng, run_id)
-            _write_csv(
+            records = _prepare_records(
+                "traffic_sms",
                 traffic_sms.rows_to_records(rows),
+                rng,
+                config.anomaly_rate,
+            )
+            _write_csv(
+                records,
                 _output_path(config.output_dir, "traffic_sms", period),
             )
             totals["traffic_sms"] += len(rows)
 
         if "traffic_internet" in config.domains:
             rows = traffic_internet.generate_traffic_internet_for_period(period, rng, run_id)
-            _write_csv(
+            records = _prepare_records(
+                "traffic_internet",
                 traffic_internet.rows_to_records(rows),
+                rng,
+                config.anomaly_rate,
+            )
+            _write_csv(
+                records,
                 _output_path(config.output_dir, "traffic_internet", period),
             )
             totals["traffic_internet"] += len(rows)
@@ -107,16 +157,28 @@ def run_generator(config: GeneratorConfig) -> dict[str, int]:
                 period, rng, run_id,
                 qos_gaming_rate=config.qos_gaming_rate,
             )
-            _write_csv(
+            records = _prepare_records(
+                "qos",
                 qos.rows_to_records(rows),
+                rng,
+                config.anomaly_rate,
+            )
+            _write_csv(
+                records,
                 _output_path(config.output_dir, "qos", period),
             )
             totals["qos"] += len(rows)
 
         if "revenue" in config.domains:
             rows = revenue.generate_revenue_for_period(period, rng, run_id)
-            _write_csv(
+            records = _prepare_records(
+                "revenue",
                 revenue.rows_to_records(rows),
+                rng,
+                config.anomaly_rate,
+            )
+            _write_csv(
+                records,
                 _output_path(config.output_dir, "revenue", period),
             )
             totals["revenue"] += len(rows)

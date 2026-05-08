@@ -20,6 +20,11 @@ class GeneratorConfig(BaseModel):
     # Time range.
     start_year: int = Field(default=2020, ge=2018, le=2030)
     end_year: int = Field(default=2024, ge=2018, le=2030)
+    period: str | None = Field(
+        default=None,
+        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+        description="Optional single reporting period in YYYY-MM format.",
+    )
 
     # Determinism.
     random_seed: int | None = Field(default=42)
@@ -30,6 +35,12 @@ class GeneratorConfig(BaseModel):
     # Anomaly injection rates.
     qos_gaming_rate: float = Field(default=0.03, ge=0.0, le=0.5)
     submission_error_rate: float = Field(default=0.01, ge=0.0, le=0.5)
+    anomaly_rate: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=0.5,
+        description="Row-level controlled anomaly rate for suspicious submissions.",
+    )
 
     # Domains to generate (allows partial runs).
     domains: list[str] = Field(

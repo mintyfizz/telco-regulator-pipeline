@@ -3,6 +3,7 @@ Command-line interface for the data generator and uploader.
 
 Usage:
     telco-generate generate --start-year 2020 --end-year 2024
+    telco-generate generate --period 2025-03 --anomaly-rate 0.03
     telco-generate upload --output-dir output/
     telco-generate verify
 """
@@ -39,27 +40,48 @@ def main(log_level: str, json_logs: bool) -> None:
 @click.option("--start-year", type=int, default=2020)
 @click.option("--end-year", type=int, default=2024)
 @click.option(
+    "--period",
+    type=str,
+    default=None,
+    help="Generate one reporting period in YYYY-MM format. Overrides start/end year.",
+)
+@click.option(
     "--output-dir",
     type=click.Path(path_type=Path),
     default=Path("output"),
 )
 @click.option("--seed", type=int, default=42)
+@click.option(
+    "--anomaly-rate",
+    type=float,
+    default=0.0,
+    show_default=True,
+    help="Controlled row-level anomaly rate for suspicious submissions.",
+)
 def generate(
     start_year: int,
     end_year: int,
+    period: str | None,
     output_dir: Path,
     seed: int,
+    anomaly_rate: float,
 ) -> None:
     """Generate synthetic operator submissions as local CSVs."""
     config = GeneratorConfig(
         output_dir=output_dir,
         start_year=start_year,
         end_year=end_year,
+        period=period,
         random_seed=seed,
+        anomaly_rate=anomaly_rate,
     )
     totals = run_generator(config)
 
     click.echo("\nGeneration complete:")
+    if period:
+        click.echo(f"  period: {period}")
+    if anomaly_rate:
+        click.echo(f"  anomaly_rate: {anomaly_rate:.3f}")
     for domain, count in totals.items():
         click.echo(f"  {domain}: {count:,} rows")
 

@@ -88,7 +88,6 @@ BEGIN
                 CASE WHEN b.churn_count < 0 THEN 'negative_churn' END,
                 CASE WHEN b.arpu_xaf IS NULL THEN 'missing_arpu' END,
                 CASE WHEN b.arpu_xaf < 0 THEN 'negative_arpu' END,
-                CASE WHEN b.arpu_xaf > 50000 THEN 'arpu_implausibly_high' END,
                 CASE WHEN b.service_category = 'mobile_internet'
                           AND b.technology_generation IS NULL
                      THEN 'missing_tech_generation_for_internet' END,

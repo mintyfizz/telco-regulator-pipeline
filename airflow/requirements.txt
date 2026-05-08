@@ -1,6 +1,9 @@
 apache-airflow-providers-postgres==5.13.0
 apache-airflow-providers-amazon==9.0.0
 boto3==1.35.0
+click==8.1.8
+numpy==1.26.4
 pandas==2.2.3
 psycopg2-binary==2.9.9
+pydantic==2.10.6
 structlog==24.4.0

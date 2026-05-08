@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS silver.subscribers (
     active_subscribers_30d      BIGINT          NOT NULL CHECK (active_subscribers_30d >= 0),
     new_activations             BIGINT          NOT NULL CHECK (new_activations >= 0),
     churn_count                 BIGINT          NOT NULL CHECK (churn_count >= 0),
-    arpu_xaf                    NUMERIC(10, 2)  NOT NULL CHECK (arpu_xaf >= 0 AND arpu_xaf <= 50000),
+    arpu_xaf                    NUMERIC(10, 2)  NOT NULL CHECK (arpu_xaf >= 0),
 
     -- Lineage and timing.
     period_start_date           DATE            NOT NULL,

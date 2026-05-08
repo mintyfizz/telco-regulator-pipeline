@@ -25,7 +25,7 @@ services:
       - telco_net
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-10-15T17-29-55Z
     container_name: telco_minio
     restart: unless-stopped
     environment:
@@ -120,6 +120,7 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
       AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+      PYTHONPATH: /opt/airflow/data_generator
       AIRFLOW_CONN_TELCO_WAREHOUSE: postgresql://telco_admin:changeme_local_only@postgres:5432/telco_warehouse
       AIRFLOW_CONN_TELCO_MINIO: aws://minio_admin:changeme_local_only@/?endpoint_url=http%3A%2F%2Fminio%3A9000&region_name=us-east-1
     volumes:
@@ -127,6 +128,7 @@ services:
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/plugins:/opt/airflow/plugins
       - ./airflow/requirements.txt:/requirements.txt
+      - ./data_generator:/opt/airflow/data_generator:ro
     ports:
       - "8080:8080"
     command: bash -c "pip install -r /requirements.txt && airflow webserver"
@@ -151,6 +153,7 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow_local_only@airflow_postgres/airflow
       AIRFLOW__CORE__FERNET_KEY: 'YlCImzjge_TeZc7jPJ7Jz3TtuFSxmd5uF8VnB-l0Q4Q='
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      PYTHONPATH: /opt/airflow/data_generator
       AIRFLOW_CONN_TELCO_WAREHOUSE: postgresql://telco_admin:changeme_local_only@postgres:5432/telco_warehouse
       AIRFLOW_CONN_TELCO_MINIO: aws://minio_admin:changeme_local_only@/?endpoint_url=http%3A%2F%2Fminio%3A9000&region_name=us-east-1
     volumes:
@@ -158,6 +161,7 @@ services:
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/plugins:/opt/airflow/plugins
       - ./airflow/requirements.txt:/requirements.txt
+      - ./data_generator:/opt/airflow/data_generator:ro
     command: bash -c "pip install -r /requirements.txt && airflow scheduler"
     restart: unless-stopped
     networks:

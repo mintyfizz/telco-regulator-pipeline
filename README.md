@@ -47,16 +47,19 @@ Implemented now:
 - Bronze tables for subscribers, voice traffic, SMS traffic, internet traffic, QoS, and revenue.
 - Silver reference data for 7 fictional operators and 15 Congolese departments.
 - Synthetic data generator for monthly 2020-2024 regulatory submissions across mobile, fixed voice, and fixed broadband segments.
+- Single-period monthly generation with deterministic seeds and controlled anomaly injection.
 - MinIO upload flow using segment-aware object paths.
 - Airflow bronze ingestion DAGs with audit logging and processed/quarantine file movement.
+- Airflow monthly reporting DAG that generates the previous closed month, uploads it, triggers bronze ingestion, and runs silver validation.
+- Silver validation tables, rejection tables, and quality event table for downstream alerting.
 
 Next:
 
-- Great Expectations validation and quarantine rules on top of bronze data.
+- dbt models for silver/gold transformations and dashboard marts.
 
 Planned:
 
-- dbt silver/gold transformations.
+- Alert notifications for severe data quality events.
 - Metabase dashboards for sector observatory analytics.
 
 ## What It Generates
@@ -181,6 +184,27 @@ Generate the full synthetic dataset:
 uv run telco-generate generate --start-year 2020 --end-year 2024 --output-dir output
 ```
 
+Generate one monthly reporting period:
+
+```bash
+uv run telco-generate generate --period 2025-03 --output-dir output/monthly/2025-03
+```
+
+Generate one month with controlled suspicious records for validation and alert demos:
+
+```bash
+uv run telco-generate generate \
+  --period 2025-03 \
+  --output-dir output/monthly/2025-03 \
+  --anomaly-rate 0.03 \
+  --seed 202503
+```
+
+The default `--anomaly-rate 0` keeps a clean calibrated baseline. A small rate
+such as `0.02` or `0.03` injects rare domain-aware scenarios like subscriber
+spikes, QoS gaming, revenue component mismatches, traffic spikes, and USF
+contribution anomalies without destroying the underlying market logic.
+
 Generated files are written to:
 
 ```text
@@ -217,6 +241,41 @@ docker exec telco_airflow_scheduler airflow dags trigger bronze_subscribers_inge
 docker exec telco_airflow_scheduler airflow dags trigger bronze_segment_domains_ingestion
 ```
 
+Run the automated monthly reporting cycle:
+
+```bash
+# Recreate Airflow after dependency or DAG changes
+docker compose up -d --force-recreate airflow_webserver airflow_scheduler
+
+# Confirm Airflow can parse the DAG
+docker exec telco_airflow_scheduler airflow dags list-import-errors
+
+# Let Airflow run monthly catchup/backfill from 2020-01 onward
+docker exec telco_airflow_scheduler airflow dags unpause monthly_reporting_pipeline
+```
+
+The `monthly_reporting_pipeline` DAG runs at `03:00` on the 5th of every
+month and processes the previous closed reporting period. For example, the
+scheduled run on `2026-05-05` processes `2026-04`.
+
+Backfill is enabled. Historical DAG runs inspect bronze first:
+
+- if all six domains already exist for a period, that period is skipped;
+- if no bronze rows exist, the month is generated, uploaded, ingested, and validated;
+- if only some domains exist, the DAG fails instead of creating duplicate or mixed data.
+
+Trigger one month manually:
+
+```bash
+docker exec telco_airflow_scheduler airflow dags trigger \
+  monthly_reporting_pipeline \
+  --conf '{"period":"2025-03"}'
+```
+
+The monthly DAG uses `anomaly_rate=0.02` by default. That creates a small
+number of suspicious but domain-aware records for validation and alerting
+demos while keeping the market totals realistic.
+
 After a successful full ingestion, expected storage state is:
 
 ```text
@@ -251,6 +310,9 @@ uv run telco-generate verify
 
 # Check Airflow DAG import errors
 docker exec telco_airflow_scheduler airflow dags list-import-errors
+
+# Trigger one automated monthly reporting run
+docker exec telco_airflow_scheduler airflow dags trigger monthly_reporting_pipeline --conf '{"period":"2025-03"}'
 ```
 
 ## Repository Layout
@@ -274,9 +336,9 @@ uv.lock                  Locked Python dependency resolution
 |---|---|---|
 | Synthetic data | Python, NumPy, Pydantic, Click | Implemented |
 | Object storage | MinIO | Running locally |
-| Warehouse | PostgreSQL 16 | Bronze implemented |
-| Orchestration | Apache Airflow | Bronze ingestion implemented |
-| Validation | Great Expectations | Planned |
+| Warehouse | PostgreSQL 16 | Bronze and silver implemented |
+| Orchestration | Apache Airflow | Bronze ingestion and monthly reporting implemented |
+| Validation | SQL silver validation, rejection tables, quality events | Implemented |
 | Transformation | dbt-core | Planned |
 | BI | Metabase | Planned |
 | Packaging | uv | Implemented |
@@ -290,10 +352,11 @@ uv.lock                  Locked Python dependency resolution
 - [x] v0.4 - Synthetic data generator
 - [x] v0.5 - Upload generated CSVs to MinIO landing bucket
 - [x] v0.6 - Airflow batch ingestion DAGs
-- [ ] v0.7 - Great Expectations validation and quarantine
-- [ ] v0.8 - dbt staging and marts models
-- [ ] v0.9 - Metabase dashboards
-- [ ] v1.0 - Production-ready release with full documentation
+- [x] v0.7 - Multi-segment silver validation and rejection tracking
+- [x] v0.8 - Monthly reporting DAG with catchup/backfill automation
+- [ ] v0.9 - dbt staging and marts models
+- [ ] v1.0 - Metabase dashboards
+- [ ] v1.1 - Production-ready release with full documentation
 
 ## License
 

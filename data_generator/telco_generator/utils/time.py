@@ -2,6 +2,7 @@
 Time utilities for monthly period generation.
 """
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
@@ -44,6 +45,14 @@ def generate_periods(start_year: int, end_year: int) -> list[ReportingPeriod]:
         for month in range(1, 13):
             periods.append(ReportingPeriod(year=year, month=month))
     return periods
+
+
+def parse_reporting_period(period: str) -> ReportingPeriod:
+    """Parse a YYYY-MM reporting period string."""
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", period):
+        raise ValueError(f"Invalid reporting period '{period}'. Expected YYYY-MM.")
+    year_str, month_str = period.split("-")
+    return ReportingPeriod(year=int(year_str), month=int(month_str))
 
 
 def linear_progress(period: ReportingPeriod, start_year: int, end_year: int) -> float:

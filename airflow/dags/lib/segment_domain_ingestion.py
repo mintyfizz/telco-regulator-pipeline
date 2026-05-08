@@ -34,13 +34,13 @@ from lib.minio_helpers import (
     get_object_size,
     list_objects,
 )
+from lib.constants import ALLOWED_SERVICE_SEGMENTS
 from lib.postgres_helpers import get_warehouse_connection, insert_rows
 
 LANDING_BUCKET = "landing"
 PROCESSED_BUCKET = "processed"
 QUARANTINE_BUCKET = "quarantine"
 LANDING_PREFIX = ""
-ALLOWED_SERVICE_SEGMENTS = {"mobile", "fixed_voice", "fixed_broadband"}
 DOMAIN_SERVICE_SEGMENTS = {
     "traffic_voice": {"mobile", "fixed_voice"},
     "traffic_sms": {"mobile"},
