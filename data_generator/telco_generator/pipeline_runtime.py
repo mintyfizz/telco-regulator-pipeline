@@ -251,7 +251,8 @@ def persist_run_metrics(hook: RecordsHook, snapshot: dict[str, Any]) -> None:
             validation_results
         )
         VALUES (
-            %s, %s::timestamptz, %s::timestamptz, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb
+            %s, %s::timestamptz, %s::timestamptz, %s, %s, %s, %s, %s, %s,
+            %s::jsonb, %s::jsonb, %s::jsonb
         )
         ON CONFLICT (report_period) DO UPDATE
         SET
