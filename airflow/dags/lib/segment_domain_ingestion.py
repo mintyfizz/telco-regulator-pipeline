@@ -10,9 +10,7 @@ objects to processed/quarantine, and write audit records.
 
 from __future__ import annotations
 
-import csv
 import hashlib
-import io
 import json
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -20,6 +18,8 @@ from typing import Any
 
 from airflow.exceptions import AirflowException
 from psycopg2.extras import Json
+from telco_generator.csv_validation import CsvValidationError, validate_csv_content
+from telco_generator.ingestion_paths import PathValidationError, parse_segment_key
 
 from lib.audit import (
     finalized_files_for_bucket,
@@ -27,6 +27,7 @@ from lib.audit import (
     record_file_ingestion,
     start_pipeline_run,
 )
+from lib.constants import ALLOWED_SERVICE_SEGMENTS
 from lib.minio_helpers import (
     copy_object,
     delete_object,
@@ -34,7 +35,6 @@ from lib.minio_helpers import (
     get_object_size,
     list_objects,
 )
-from lib.constants import ALLOWED_SERVICE_SEGMENTS
 from lib.postgres_helpers import get_warehouse_connection, insert_rows
 
 LANDING_BUCKET = "landing"
@@ -440,54 +440,35 @@ def finish_segment_domains_run(
 
 
 def _parse_segment_key(key: str) -> dict[str, str]:
-    parts = key.split("/")
-    if len(parts) != 6:
-        raise ValidationError(
-            "Expected key format: <segment>/<operator>/<domain>/<year>/<month>/<file>.csv"
+    try:
+        parsed = parse_segment_key(
+            key,
+            allowed_service_segments=ALLOWED_SERVICE_SEGMENTS,
+            allowed_domains=set(DOMAIN_CONFIGS),
+            domain_service_segments=DOMAIN_SERVICE_SEGMENTS,
         )
-
-    service_segment, operator_id, domain, year, month, filename = parts
-    if service_segment not in ALLOWED_SERVICE_SEGMENTS:
-        raise ValidationError(f"Unsupported service_segment: {service_segment}")
-    if domain not in DOMAIN_CONFIGS:
-        raise ValidationError(f"Unsupported domain: {domain}")
-    if service_segment not in DOMAIN_SERVICE_SEGMENTS[domain]:
-        raise ValidationError(f"Segment {service_segment} does not submit domain {domain}")
-    if not filename.endswith(".csv"):
-        raise ValidationError("Object is not a CSV file")
-
+    except PathValidationError as exc:
+        raise ValidationError(str(exc)) from exc
     return {
-        "service_segment": service_segment,
-        "operator_id": operator_id,
-        "domain": domain,
-        "year": year,
-        "month": month,
-        "report_period": f"{year}-{month}",
-        "filename": filename,
+        "service_segment": parsed.service_segment,
+        "operator_id": parsed.operator_id,
+        "domain": parsed.domain,
+        "year": parsed.year,
+        "month": parsed.month,
+        "report_period": parsed.report_period,
+        "filename": parsed.filename,
     }
 
 
 def _read_csv(content: bytes, config: DomainConfig) -> list[dict[str, str]]:
-    text = content.decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(text))
-
-    if not reader.fieldnames:
-        raise ValidationError("CSV has no header row")
-
-    missing = config.required_columns - set(reader.fieldnames)
-    if missing:
-        raise ValidationError(f"CSV is missing required columns: {sorted(missing)}")
-
-    rows: list[dict[str, str]] = []
-    for row_number, row in enumerate(reader, start=2):
-        if None in row:
-            raise ValidationError(f"CSV row {row_number} has extra fields")
-        rows.append(row)
-
-    if not rows:
-        raise ValidationError("CSV has no data rows")
-
-    return rows
+    try:
+        return validate_csv_content(
+            content=content,
+            required_columns=config.required_columns,
+            label=f"{config.domain} CSV",
+        )
+    except CsvValidationError as exc:
+        raise ValidationError(str(exc)) from exc
 
 
 def _build_insert_rows(

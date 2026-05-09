@@ -1,0 +1,27 @@
+version: 2
+
+sources:
+  - name: silver
+    schema: silver
+    freshness:
+      warn_after: {count: 45, period: day}
+      error_after: {count: 75, period: day}
+    tables:
+      - name: subscribers
+        loaded_at_field: silver_loaded_at
+      - name: revenue
+        loaded_at_field: silver_loaded_at
+      - name: qos
+        loaded_at_field: silver_loaded_at
+      - name: data_quality_events
+        loaded_at_field: detected_at
+      - name: operators
+  - name: audit
+    schema: audit
+    freshness:
+      warn_after: {count: 45, period: day}
+      error_after: {count: 75, period: day}
+    tables:
+      - name: monthly_reporting_run_metrics
+        loaded_at_field: validation_started_at
+      - name: v_monthly_reporting_run_health

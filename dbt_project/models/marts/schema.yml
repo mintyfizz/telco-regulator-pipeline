@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: mart_regulator_kpis_monthly
+    columns:
+      - name: report_period
+        tests:
+          - not_null
+      - name: operator_id
+        tests:
+          - not_null
+      - name: service_segment
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['mobile', 'fixed_voice', 'fixed_broadband']
+      - name: total_revenue_xaf
+        tests:
+          - not_null
+      - name: avg_arpu_xaf
+        description: Nullable when no subscriber rows exist for operator/segment/period.
+      - name: avg_network_availability_pct
+        description: Nullable when no QoS rows exist for operator/segment/period.
+      - name: avg_latency_ms
+        description: Nullable when no QoS rows exist for operator/segment/period.
+
+  - name: mart_quality_events_open
+    columns:
+      - name: report_period
+        tests:
+          - not_null
+      - name: severity
+        tests:
+          - accepted_values:
+              values: ['info', 'warning', 'error', 'critical']
+      - name: open_event_count
+        tests:
+          - not_null
+
+  - name: mart_operator_scorecard_monthly
+    columns:
+      - name: report_period
+        tests:
+          - not_null
+      - name: operator_id
+        tests:
+          - not_null
+      - name: service_segment
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['mobile', 'fixed_voice', 'fixed_broadband']
+      - name: subscriber_market_share_pct
+        tests:
+          - not_null
+      - name: revenue_market_share_pct
+        tests:
+          - not_null
+
+  - name: mart_pipeline_run_health
+    columns:
+      - name: report_period
+        tests:
+          - not_null
+      - name: run_health
+        tests:
+          - accepted_values:
+              values: ['healthy', 'watch', 'attention']

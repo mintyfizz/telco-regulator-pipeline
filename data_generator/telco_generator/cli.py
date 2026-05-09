@@ -96,16 +96,22 @@ def generate(
 @click.option(
     "--endpoint",
     default="http://localhost:9000",
+    envvar="TELCO_MINIO_ENDPOINT_URL",
+    show_envvar=True,
     help="MinIO endpoint URL.",
 )
 @click.option(
     "--access-key",
-    default="minio_admin",
+    envvar="TELCO_MINIO_ACCESS_KEY",
+    required=True,
+    show_envvar=True,
     help="MinIO access key.",
 )
 @click.option(
     "--secret-key",
-    default="changeme_local_only",
+    envvar="TELCO_MINIO_SECRET_KEY",
+    required=True,
+    show_envvar=True,
     help="MinIO secret key.",
 )
 @click.option(
@@ -163,9 +169,14 @@ def upload(
 
 
 @main.command()
-@click.option("--endpoint", default="http://localhost:9000")
-@click.option("--access-key", default="minio_admin")
-@click.option("--secret-key", default="changeme_local_only")
+@click.option(
+    "--endpoint",
+    default="http://localhost:9000",
+    envvar="TELCO_MINIO_ENDPOINT_URL",
+    show_envvar=True,
+)
+@click.option("--access-key", envvar="TELCO_MINIO_ACCESS_KEY", required=True, show_envvar=True)
+@click.option("--secret-key", envvar="TELCO_MINIO_SECRET_KEY", required=True, show_envvar=True)
 def verify(endpoint: str, access_key: str, secret_key: str) -> None:
     """Verify MinIO contents — count files per bucket and per operator."""
     config = MinioConfig(

@@ -3,26 +3,32 @@
 from __future__ import annotations
 
 import shutil
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from airflow.decorators import dag, task
 from airflow.exceptions import AirflowException, AirflowSkipException
+from airflow.hooks.base import BaseHook
 from airflow.operators.python import get_current_context
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from telco_generator.config import GeneratorConfig
 from telco_generator.orchestrator import run_generator
+from telco_generator.pipeline_runtime import (
+    build_generation_decision,
+    classify_period_status,
+    collect_validation_snapshot,
+    persist_run_metrics,
+    resolve_generation_parameters,
+)
 from telco_generator.uploaders.minio_client import MinioConfig
 from telco_generator.uploaders.minio_uploader import upload_all
 from telco_generator.utils.time import parse_reporting_period
 
 DAG_ID = "monthly_reporting_pipeline"
 WAREHOUSE_CONN_ID = "telco_warehouse"
-MINIO_ENDPOINT = "http://minio:9000"
-MINIO_ACCESS_KEY = "minio_admin"
-MINIO_SECRET_KEY = "changeme_local_only"
+MINIO_CONN_ID = "telco_minio"
 OUTPUT_BASE_DIR = Path("/tmp/telco_monthly_reporting")
 
 
@@ -31,10 +37,16 @@ def _period_from_logical_date(logical_date: Any) -> str:
     previous_month = logical_date.subtract(months=1)
     return previous_month.format("YYYY-MM")
 
-
-def _seed_for_period(period: str) -> int:
-    """Deterministic default seed: 2025-03 -> 202503."""
-    return int(period.replace("-", ""))
+def _minio_config_from_connection() -> MinioConfig:
+    """Resolve MinIO settings from the Airflow telco_minio connection."""
+    conn = BaseHook.get_connection(MINIO_CONN_ID)
+    extra = conn.extra_dejson
+    return MinioConfig(
+        endpoint_url=str(extra.get("endpoint_url") or "http://minio:9000"),
+        access_key=conn.login,
+        secret_key=conn.password,
+        region_name=str(extra.get("region_name") or "us-east-1"),
+    )
 
 
 @dag(
@@ -71,41 +83,32 @@ def monthly_reporting_pipeline_dag() -> None:
     @task
     def inspect_period(period: str) -> dict[str, Any]:
         sql = """
-            SELECT 'subscribers' AS domain, COUNT(*)
-            FROM bronze.subscribers
-            WHERE report_period = %s
-            UNION ALL
-            SELECT 'traffic_voice', COUNT(*)
-            FROM bronze.traffic_voice
-            WHERE report_period = %s
-            UNION ALL
-            SELECT 'traffic_sms', COUNT(*)
-            FROM bronze.traffic_sms
-            WHERE report_period = %s
-            UNION ALL
-            SELECT 'traffic_internet', COUNT(*)
-            FROM bronze.traffic_internet
-            WHERE report_period = %s
-            UNION ALL
-            SELECT 'qos', COUNT(*)
-            FROM bronze.qos
-            WHERE report_period = %s
-            UNION ALL
-            SELECT 'revenue', COUNT(*)
-            FROM bronze.revenue
-            WHERE report_period = %s
+            SELECT domain, row_count FROM (
+                SELECT 'subscribers' AS domain, COUNT(*)::BIGINT AS row_count
+                FROM bronze.subscribers WHERE report_period = %s
+                UNION ALL
+                SELECT 'traffic_voice', COUNT(*)::BIGINT
+                FROM bronze.traffic_voice WHERE report_period = %s
+                UNION ALL
+                SELECT 'traffic_sms', COUNT(*)::BIGINT
+                FROM bronze.traffic_sms WHERE report_period = %s
+                UNION ALL
+                SELECT 'traffic_internet', COUNT(*)::BIGINT
+                FROM bronze.traffic_internet WHERE report_period = %s
+                UNION ALL
+                SELECT 'qos', COUNT(*)::BIGINT
+                FROM bronze.qos WHERE report_period = %s
+                UNION ALL
+                SELECT 'revenue', COUNT(*)::BIGINT
+                FROM bronze.revenue WHERE report_period = %s
+            ) t
+            ORDER BY domain
         """
         hook = PostgresHook(postgres_conn_id=WAREHOUSE_CONN_ID)
         rows = hook.get_records(sql, parameters=(period, period, period, period, period, period))
         counts = {domain: int(count) for domain, count in rows}
         loaded_domains = [domain for domain, count in counts.items() if count > 0]
-
-        if len(loaded_domains) == 6:
-            status = "loaded"
-        elif loaded_domains:
-            status = "partial"
-        else:
-            status = "empty"
+        status = classify_period_status(counts)
 
         return {
             "period": period,
@@ -116,24 +119,20 @@ def monthly_reporting_pipeline_dag() -> None:
 
     @task
     def generate_month(period: str, period_status: dict[str, Any]) -> dict[str, Any]:
-        status = period_status["status"]
-        if status == "loaded":
-            return {
-                "period": period,
-                "generated": False,
-                "reason": "period already fully loaded in bronze",
-            }
-        if status == "partial":
-            raise AirflowException(
-                f"Refusing to auto-generate {period}: bronze already has partial data "
-                f"for domains {period_status['loaded_domains']}. Clean up or handle manually."
+        try:
+            decision = build_generation_decision(
+                period=period,
+                status=str(period_status["status"]),
+                loaded_domains=[str(item) for item in period_status.get("loaded_domains", [])],
             )
+        except ValueError as exc:
+            raise AirflowException(str(exc)) from exc
+        if not decision["generated"]:
+            return decision
 
         context = get_current_context()
         params = context.get("params", {})
-        anomaly_rate = float(params.get("anomaly_rate") or 0.0)
-        seed_param = params.get("seed")
-        seed = int(seed_param) if seed_param is not None else _seed_for_period(period)
+        anomaly_rate, seed = resolve_generation_parameters(period=period, params=params)
 
         output_dir = OUTPUT_BASE_DIR / period
         shutil.rmtree(output_dir, ignore_errors=True)
@@ -167,11 +166,7 @@ def monthly_reporting_pipeline_dag() -> None:
 
         stats = upload_all(
             output_dir=Path(generation_result["output_dir"]),
-            minio_config=MinioConfig(
-                endpoint_url=MINIO_ENDPOINT,
-                access_key=MINIO_ACCESS_KEY,
-                secret_key=MINIO_SECRET_KEY,
-            ),
+            minio_config=_minio_config_from_connection(),
             skip_existing=True,
         )
 
@@ -199,25 +194,15 @@ def monthly_reporting_pipeline_dag() -> None:
         return upload_result
 
     @task
-    def run_silver_validations() -> dict[str, Any]:
+    def run_silver_validations(period: str) -> dict[str, Any]:
         hook = PostgresHook(postgres_conn_id=WAREHOUSE_CONN_ID)
-        rows = hook.get_records("SELECT * FROM silver.run_all_validations();")
-        event_rows = hook.get_records(
-            "SELECT silver.capture_suspicious_anomaly_events();"
+        snapshot = collect_validation_snapshot(
+            hook=hook,
+            period=period,
+            validation_started_at=datetime.now(UTC),
         )
-        event_count = int(event_rows[0][0]) if event_rows else 0
-        return {
-            "validation_results": [
-            {
-                "domain": domain,
-                "rows_processed": int(rows_processed),
-                "rows_validated": int(rows_validated),
-                "rows_rejected": int(rows_rejected),
-            }
-            for domain, rows_processed, rows_validated, rows_rejected in rows
-            ],
-            "events_captured": event_count,
-        }
+        persist_run_metrics(hook=hook, snapshot=snapshot)
+        return snapshot
 
     period = resolve_reporting_period()
     period_status = inspect_period(period)
@@ -255,7 +240,7 @@ def monthly_reporting_pipeline_dag() -> None:
         failed_states=["failed"],
     )
 
-    silver_results = run_silver_validations()
+    silver_results = run_silver_validations(period)
 
     ready_for_ingestion >> run_subscribers_ingestion >> run_segment_ingestion >> silver_results
 

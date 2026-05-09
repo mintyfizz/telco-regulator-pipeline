@@ -55,12 +55,11 @@ Implemented now:
 
 Next:
 
-- dbt models for silver/gold transformations and dashboard marts.
+- Metabase dashboards for sector observatory analytics.
 
 Planned:
 
-- Alert notifications for severe data quality events.
-- Metabase dashboards for sector observatory analytics.
+- Alert notification delivery integrations (email/webhook/incident tooling).
 
 ## What It Generates
 
@@ -163,6 +162,13 @@ Install Python dependencies:
 uv sync
 ```
 
+Create local environment settings:
+
+```bash
+cp .env.example .env
+# then edit .env with your local secrets/connection values
+```
+
 Start local services:
 
 ```bash
@@ -171,12 +177,12 @@ docker compose up -d
 
 Available services:
 
-| Service | URL / Port | Credentials |
+| Service | URL / Port | Credentials source |
 |---|---|---|
-| PostgreSQL | `localhost:5433` | `telco_admin` / `changeme_local_only` |
-| MinIO API | `localhost:9000` | `minio_admin` / `changeme_local_only` |
-| MinIO Console | `http://localhost:9001` | `minio_admin` / `changeme_local_only` |
-| Airflow UI | `http://localhost:8080` | `admin` / `admin` |
+| PostgreSQL | `localhost:5433` | `.env` (`POSTGRES_USER`, `TELCO_POSTGRES_PASSWORD`) |
+| MinIO API | `localhost:9000` | `.env` (`TELCO_MINIO_ROOT_USER`, `TELCO_MINIO_ROOT_PASSWORD`) |
+| MinIO Console | `http://localhost:9001` | `.env` (`TELCO_MINIO_ROOT_USER`, `TELCO_MINIO_ROOT_PASSWORD`) |
+| Airflow UI | `http://localhost:8080` | `.env` (`AIRFLOW_ADMIN_PASSWORD`) |
 
 Generate the full synthetic dataset:
 
@@ -222,6 +228,9 @@ Generated output is ignored by git. Keep the generator code, not generated data,
 Upload generated files to MinIO:
 
 ```bash
+set -a
+source .env
+set +a
 uv run telco-generate upload --output-dir output/
 ```
 
@@ -303,10 +312,17 @@ docker compose down -v
 uv run telco-generate generate --start-year 2020 --end-year 2024 --output-dir output
 
 # Upload generated data to MinIO landing
+set -a
+source .env
+set +a
 uv run telco-generate upload --output-dir output/
 
 # Verify MinIO object counts
 uv run telco-generate verify
+
+# Quality gate checks used in CI
+make lint
+make test
 
 # Check Airflow DAG import errors
 docker exec telco_airflow_scheduler airflow dags list-import-errors
@@ -315,12 +331,27 @@ docker exec telco_airflow_scheduler airflow dags list-import-errors
 docker exec telco_airflow_scheduler airflow dags trigger monthly_reporting_pipeline --conf '{"period":"2025-03"}'
 ```
 
+Stabilization and operations docs:
+
+- `docs/STABILIZATION_CHECKPOINT.md`
+- `docs/RELEASE_v0.9.1_STABILIZATION.md`
+- `docs/CONFIGURATION_CONTRACT.md`
+- `docs/PRODUCTION_PROFILE.md`
+- `docs/OPERATIONS_RUNBOOK.md`
+- `docs/METABASE_DASHBOARD_PLAN.md`
+- `docs/ALERT_POLICY.md`
+- `docs/PRODUCTION_RELEASE_RUNBOOK.md`
+
+PR process gate template:
+
+- `.github/pull_request_template.md`
+
 ## Repository Layout
 
 ```text
 airflow/                 Airflow DAGs and ingestion helper library
 data_generator/          Synthetic telecom submission generator
-dbt_project/             Future dbt models and tests
+dbt_project/             dbt staging/marts models and schema tests
 docs/                    Design notes, decisions, screenshots
 great_expectations/      Future data quality project
 infra/postgres/init/     PostgreSQL schema and seed SQL
@@ -339,7 +370,7 @@ uv.lock                  Locked Python dependency resolution
 | Warehouse | PostgreSQL 16 | Bronze and silver implemented |
 | Orchestration | Apache Airflow | Bronze ingestion and monthly reporting implemented |
 | Validation | SQL silver validation, rejection tables, quality events | Implemented |
-| Transformation | dbt-core | Planned |
+| Transformation | dbt-core | Implemented (staging + marts scaffold) |
 | BI | Metabase | Planned |
 | Packaging | uv | Implemented |
 | Container runtime | Docker Compose | Implemented |
@@ -354,9 +385,12 @@ uv.lock                  Locked Python dependency resolution
 - [x] v0.6 - Airflow batch ingestion DAGs
 - [x] v0.7 - Multi-segment silver validation and rejection tracking
 - [x] v0.8 - Monthly reporting DAG with catchup/backfill automation
-- [ ] v0.9 - dbt staging and marts models
+- [x] v0.9 - dbt staging and marts models
+- [x] v0.9.1 - Stabilization checkpoint (strict quality gates, run observability, config hardening baseline)
 - [ ] v1.0 - Metabase dashboards
 - [ ] v1.1 - Production-ready release with full documentation
+
+Execution gate policy: reliability and security work must remain ahead of new domain scope.
 
 ## License
 
