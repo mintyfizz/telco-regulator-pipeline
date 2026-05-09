@@ -48,5 +48,8 @@ FROM audit.monthly_reporting_run_metrics m;
 COMMENT ON TABLE audit.monthly_reporting_run_metrics IS
 'Per-period operational metrics emitted by monthly_reporting_pipeline for observability and triage.';
 
+COMMENT ON COLUMN audit.monthly_reporting_run_metrics.validation_window_start IS
+'Lower watermark used for incremental silver validation/event capture; NULL when no period-scoped bronze load timestamp is available.';
+
 COMMENT ON VIEW audit.v_monthly_reporting_run_health IS
 'Operational health lens over monthly run metrics with coarse healthy/watch/attention classification.';

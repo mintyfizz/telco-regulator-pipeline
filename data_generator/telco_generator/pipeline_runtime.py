@@ -26,6 +26,14 @@ class RecordsHook(Protocol):
     ) -> list[tuple[Any, ...]]: ...
 
 
+def _extract_scalar(rows: list[tuple[Any, ...]]) -> object | None:
+    """Return first-column scalar from first row, or None when no rows exist."""
+    if not rows:
+        return None
+    first_row = rows[0]
+    return first_row[0] if first_row else None
+
+
 def classify_period_status(
     counts: dict[str, int],
     required_domains: tuple[str, ...] = REQUIRED_DOMAINS,
@@ -93,7 +101,7 @@ def collect_validation_snapshot(
         """,
         parameters=(period, period, period, period, period, period),
     )
-    loaded_after = min_loaded_at_rows[0][0] if min_loaded_at_rows else None
+    loaded_after = _extract_scalar(min_loaded_at_rows)
 
     rows = hook.get_records(
         "SELECT * FROM silver.run_all_validations(%s, %s);",
@@ -103,7 +111,8 @@ def collect_validation_snapshot(
         "SELECT silver.capture_suspicious_anomaly_events(%s, %s);",
         parameters=(None, loaded_after),
     )
-    event_count = int(event_rows[0][0]) if event_rows else 0
+    event_scalar = _extract_scalar(event_rows)
+    event_count = int(event_scalar) if event_scalar is not None else 0
 
     bronze_rows = hook.get_records(
         """

@@ -17,6 +17,12 @@ models:
       - name: total_revenue_xaf
         tests:
           - not_null
+      - name: avg_arpu_xaf
+        description: Nullable when no subscriber rows exist for operator/segment/period.
+      - name: avg_network_availability_pct
+        description: Nullable when no QoS rows exist for operator/segment/period.
+      - name: avg_latency_ms
+        description: Nullable when no QoS rows exist for operator/segment/period.
 
   - name: mart_quality_events_open
     columns:

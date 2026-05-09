@@ -38,7 +38,7 @@ def test_resolve_generation_parameters_defaults_seed_to_period() -> None:
     assert seed == 202503
 
 
-class _FakeHook:
+class _FakeRecordsHook:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[object, ...] | None]] = []
         loaded_after = datetime(2025, 3, 1, 0, 0, tzinfo=UTC)
@@ -62,7 +62,7 @@ class _FakeHook:
 
 
 def test_collect_validation_snapshot_uses_incremental_window_and_alert_eval() -> None:
-    hook = _FakeHook()
+    hook = _FakeRecordsHook()
     snapshot = collect_validation_snapshot(
         hook=hook,
         period="2025-03",
@@ -81,7 +81,7 @@ def test_collect_validation_snapshot_uses_incremental_window_and_alert_eval() ->
 
 
 def test_persist_run_metrics_aggregates_totals() -> None:
-    hook = _FakeHook()
+    hook = _FakeRecordsHook()
     snapshot = collect_validation_snapshot(
         hook=hook,
         period="2025-03",
