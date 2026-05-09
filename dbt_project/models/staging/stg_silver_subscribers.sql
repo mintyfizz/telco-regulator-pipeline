@@ -1,4 +1,4 @@
-select
+SELECT
   silver_id,
   bronze_id,
   operator_id,
@@ -12,4 +12,4 @@ select
   submitted_at,
   bronze_loaded_at,
   silver_loaded_at
-from {{ source('silver', 'subscribers') }}
+FROM {{ source('silver', 'subscribers') }}

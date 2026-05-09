@@ -1,69 +1,71 @@
-with subscribers as (
-  select
+WITH subscribers AS (
+  SELECT
     report_period,
     operator_id,
     service_segment,
-    sum(total_subscribers) as total_subscribers,
-    sum(active_subscribers_30d) as active_subscribers_30d,
-    avg(arpu_xaf) as avg_arpu_xaf
-  from {{ ref('stg_silver_subscribers') }}
-  group by 1,2,3
+    SUM(total_subscribers) AS total_subscribers,
+    SUM(active_subscribers_30d) AS active_subscribers_30d,
+    AVG(arpu_xaf) AS avg_arpu_xaf
+  FROM {{ ref('stg_silver_subscribers') }}
+  GROUP BY 1,2,3
 ),
-revenue as (
-  select
+revenue AS (
+  SELECT
     report_period,
     operator_id,
     service_segment,
-    sum(total_revenue_xaf) as total_revenue_xaf,
-    sum(usf_contribution_xaf) as total_usf_contribution_xaf
-  from {{ ref('stg_silver_revenue') }}
-  group by 1,2,3
+    SUM(total_revenue_xaf) AS total_revenue_xaf,
+    SUM(usf_contribution_xaf) AS total_usf_contribution_xaf
+  FROM {{ ref('stg_silver_revenue') }}
+  GROUP BY 1,2,3
 ),
-qos as (
-  select
+qos AS (
+  SELECT
     report_period,
     operator_id,
     service_segment,
-    avg(network_availability_pct) as avg_network_availability_pct,
-    avg(avg_latency_ms) as avg_latency_ms,
-    sum(qos_related_complaints) as qos_related_complaints
-  from {{ ref('stg_silver_qos') }}
-  group by 1,2,3
+    AVG(network_availability_pct) AS avg_network_availability_pct,
+    AVG(avg_latency_ms) AS avg_latency_ms,
+    SUM(qos_related_complaints) AS qos_related_complaints
+  FROM {{ ref('stg_silver_qos') }}
+  GROUP BY 1,2,3
 ),
-events as (
-  select
+events AS (
+  SELECT
     report_period,
     operator_id,
     service_segment,
-    count(*) filter (where status in ('open', 'acknowledged')) as open_events,
-    count(*) filter (where severity = 'critical' and status in ('open', 'acknowledged')) as open_critical_events
-  from {{ ref('stg_silver_data_quality_events') }}
-  group by 1,2,3
+    COUNT(*) FILTER (WHERE status IN ('open', 'acknowledged')) AS open_events,
+    COUNT(*) FILTER (
+      WHERE severity = 'critical' AND status IN ('open', 'acknowledged')
+    ) AS open_critical_events
+  FROM {{ ref('stg_silver_data_quality_events') }}
+  GROUP BY 1,2,3
 )
-select
-  coalesce(s.report_period, r.report_period, q.report_period, e.report_period) as report_period,
-  coalesce(s.operator_id, r.operator_id, q.operator_id, e.operator_id) as operator_id,
-  coalesce(s.service_segment, r.service_segment, q.service_segment, e.service_segment) as service_segment,
-  coalesce(s.total_subscribers, 0) as total_subscribers,
-  coalesce(s.active_subscribers_30d, 0) as active_subscribers_30d,
+SELECT
+  COALESCE(s.report_period, r.report_period, q.report_period, e.report_period) AS report_period,
+  COALESCE(s.operator_id, r.operator_id, q.operator_id, e.operator_id) AS operator_id,
+  COALESCE(s.service_segment, r.service_segment, q.service_segment, e.service_segment) AS service_segment,
+  COALESCE(s.total_subscribers, 0) AS total_subscribers,
+  COALESCE(s.active_subscribers_30d, 0) AS active_subscribers_30d,
   s.avg_arpu_xaf,
-  coalesce(r.total_revenue_xaf, 0) as total_revenue_xaf,
-  coalesce(r.total_usf_contribution_xaf, 0) as total_usf_contribution_xaf,
+  COALESCE(r.total_revenue_xaf, 0) AS total_revenue_xaf,
+  COALESCE(r.total_usf_contribution_xaf, 0) AS total_usf_contribution_xaf,
   q.avg_network_availability_pct,
   q.avg_latency_ms,
-  coalesce(q.qos_related_complaints, 0) as qos_related_complaints,
-  coalesce(e.open_events, 0) as open_quality_events,
-  coalesce(e.open_critical_events, 0) as open_critical_quality_events
-from subscribers s
-full outer join revenue r
-  on s.report_period = r.report_period
- and s.operator_id = r.operator_id
- and s.service_segment = r.service_segment
-full outer join qos q
-  on coalesce(s.report_period, r.report_period) = q.report_period
- and coalesce(s.operator_id, r.operator_id) = q.operator_id
- and coalesce(s.service_segment, r.service_segment) = q.service_segment
-full outer join events e
-  on coalesce(s.report_period, r.report_period, q.report_period) = e.report_period
- and coalesce(s.operator_id, r.operator_id, q.operator_id) = e.operator_id
- and coalesce(s.service_segment, r.service_segment, q.service_segment) = e.service_segment
+  COALESCE(q.qos_related_complaints, 0) AS qos_related_complaints,
+  COALESCE(e.open_events, 0) AS open_quality_events,
+  COALESCE(e.open_critical_events, 0) AS open_critical_quality_events
+FROM subscribers s
+FULL OUTER JOIN revenue r
+  ON s.report_period = r.report_period
+ AND s.operator_id = r.operator_id
+ AND s.service_segment = r.service_segment
+FULL OUTER JOIN qos q
+  ON COALESCE(s.report_period, r.report_period) = q.report_period
+ AND COALESCE(s.operator_id, r.operator_id) = q.operator_id
+ AND COALESCE(s.service_segment, r.service_segment) = q.service_segment
+FULL OUTER JOIN events e
+  ON COALESCE(s.report_period, r.report_period, q.report_period) = e.report_period
+ AND COALESCE(s.operator_id, r.operator_id, q.operator_id) = e.operator_id
+ AND COALESCE(s.service_segment, r.service_segment, q.service_segment) = e.service_segment

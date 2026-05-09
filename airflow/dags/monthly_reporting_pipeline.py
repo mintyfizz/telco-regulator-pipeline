@@ -200,7 +200,7 @@ def monthly_reporting_pipeline_dag() -> None:
     @task
     def run_silver_validations(period: str) -> dict[str, Any]:
         hook = PostgresHook(postgres_conn_id=WAREHOUSE_CONN_ID)
-        started_at = datetime.now(UTC)
+        validation_started_at = datetime.now(UTC)
 
         min_loaded_at_rows = hook.get_records(
             """
@@ -314,7 +314,7 @@ def monthly_reporting_pipeline_dag() -> None:
         return {
             "period": period,
             "validation_window_start": loaded_after.isoformat() if loaded_after else None,
-            "validation_started_at": started_at.isoformat(),
+            "validation_started_at": validation_started_at.isoformat(),
             "validation_results": [
                 {
                     "domain": domain,

@@ -1,4 +1,4 @@
-select
+SELECT
   event_id,
   event_fingerprint,
   domain,
@@ -21,4 +21,4 @@ select
   detected_at,
   detected_by_run_id,
   metadata
-from {{ source('silver', 'data_quality_events') }}
+FROM {{ source('silver', 'data_quality_events') }}
