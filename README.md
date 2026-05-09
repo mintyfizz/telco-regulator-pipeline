@@ -162,6 +162,13 @@ Install Python dependencies:
 uv sync
 ```
 
+Create local environment settings:
+
+```bash
+cp .env.example .env
+# then edit .env with your local secrets/connection values
+```
+
 Start local services:
 
 ```bash
@@ -170,12 +177,12 @@ docker compose up -d
 
 Available services:
 
-| Service | URL / Port | Credentials |
+| Service | URL / Port | Credentials source |
 |---|---|---|
-| PostgreSQL | `localhost:5433` | `telco_admin` / `changeme_local_only` |
-| MinIO API | `localhost:9000` | `minio_admin` / `changeme_local_only` |
-| MinIO Console | `http://localhost:9001` | `minio_admin` / `changeme_local_only` |
-| Airflow UI | `http://localhost:8080` | `admin` / `admin` |
+| PostgreSQL | `localhost:5433` | `.env` (`POSTGRES_USER`, `TELCO_POSTGRES_PASSWORD`) |
+| MinIO API | `localhost:9000` | `.env` (`TELCO_MINIO_ROOT_USER`, `TELCO_MINIO_ROOT_PASSWORD`) |
+| MinIO Console | `http://localhost:9001` | `.env` (`TELCO_MINIO_ROOT_USER`, `TELCO_MINIO_ROOT_PASSWORD`) |
+| Airflow UI | `http://localhost:8080` | `.env` (`AIRFLOW_ADMIN_PASSWORD`) |
 
 Generate the full synthetic dataset:
 
@@ -221,8 +228,9 @@ Generated output is ignored by git. Keep the generator code, not generated data,
 Upload generated files to MinIO:
 
 ```bash
-export TELCO_MINIO_ACCESS_KEY=minio_admin
-export TELCO_MINIO_SECRET_KEY=changeme_local_only
+set -a
+source .env
+set +a
 uv run telco-generate upload --output-dir output/
 ```
 
@@ -304,8 +312,9 @@ docker compose down -v
 uv run telco-generate generate --start-year 2020 --end-year 2024 --output-dir output
 
 # Upload generated data to MinIO landing
-export TELCO_MINIO_ACCESS_KEY=minio_admin
-export TELCO_MINIO_SECRET_KEY=changeme_local_only
+set -a
+source .env
+set +a
 uv run telco-generate upload --output-dir output/
 
 # Verify MinIO object counts
@@ -321,6 +330,15 @@ docker exec telco_airflow_scheduler airflow dags list-import-errors
 # Trigger one automated monthly reporting run
 docker exec telco_airflow_scheduler airflow dags trigger monthly_reporting_pipeline --conf '{"period":"2025-03"}'
 ```
+
+Stabilization and operations docs:
+
+- `docs/STABILIZATION_CHECKPOINT.md`
+- `docs/CONFIGURATION_CONTRACT.md`
+- `docs/PRODUCTION_PROFILE.md`
+- `docs/OPERATIONS_RUNBOOK.md`
+- `docs/METABASE_DASHBOARD_PLAN.md`
+- `docs/ALERT_POLICY.md`
 
 ## Repository Layout
 
@@ -362,8 +380,11 @@ uv.lock                  Locked Python dependency resolution
 - [x] v0.7 - Multi-segment silver validation and rejection tracking
 - [x] v0.8 - Monthly reporting DAG with catchup/backfill automation
 - [x] v0.9 - dbt staging and marts models
+- [x] v0.9.1 - Stabilization checkpoint (strict quality gates, run observability, config hardening baseline)
 - [ ] v1.0 - Metabase dashboards
 - [ ] v1.1 - Production-ready release with full documentation
+
+Execution gate policy: reliability and security work must remain ahead of new domain scope.
 
 ## License
 

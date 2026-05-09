@@ -9,3 +9,8 @@ sources:
       - name: qos
       - name: data_quality_events
       - name: operators
+  - name: audit
+    schema: audit
+    tables:
+      - name: monthly_reporting_run_metrics
+      - name: v_monthly_reporting_run_health

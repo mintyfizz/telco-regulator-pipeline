@@ -9,15 +9,14 @@ audit records.
 
 from __future__ import annotations
 
-import csv
 import hashlib
-import io
 import json
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from airflow.exceptions import AirflowException
 from psycopg2.extras import Json
+from telco_generator.csv_validation import CsvValidationError, validate_csv_content
 from telco_generator.ingestion_paths import PathValidationError, parse_subscriber_key
 
 from lib.audit import (
@@ -273,26 +272,10 @@ def _parse_subscriber_key(key: str) -> dict[str, str]:
 
 
 def _read_csv(content: bytes) -> list[dict[str, str]]:
-    text = content.decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(text))
-
-    if not reader.fieldnames:
-        raise ValidationError("CSV has no header row")
-
-    missing = REQUIRED_COLUMNS - set(reader.fieldnames)
-    if missing:
-        raise ValidationError(f"CSV is missing required columns: {sorted(missing)}")
-
-    rows: list[dict[str, str]] = []
-    for row_number, row in enumerate(reader, start=2):
-        if None in row:
-            raise ValidationError(f"CSV row {row_number} has extra fields")
-        rows.append(row)
-
-    if not rows:
-        raise ValidationError("CSV has no data rows")
-
-    return rows
+    try:
+        return validate_csv_content(content=content, required_columns=REQUIRED_COLUMNS)
+    except CsvValidationError as exc:
+        raise ValidationError(str(exc)) from exc
 
 
 def _build_insert_rows(

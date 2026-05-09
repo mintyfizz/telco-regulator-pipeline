@@ -30,3 +30,33 @@ models:
       - name: open_event_count
         tests:
           - not_null
+
+  - name: mart_operator_scorecard_monthly
+    columns:
+      - name: report_period
+        tests:
+          - not_null
+      - name: operator_id
+        tests:
+          - not_null
+      - name: service_segment
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['mobile', 'fixed_voice', 'fixed_broadband']
+      - name: subscriber_market_share_pct
+        tests:
+          - not_null
+      - name: revenue_market_share_pct
+        tests:
+          - not_null
+
+  - name: mart_pipeline_run_health
+    columns:
+      - name: report_period
+        tests:
+          - not_null
+      - name: run_health
+        tests:
+          - accepted_values:
+              values: ['healthy', 'watch', 'attention']

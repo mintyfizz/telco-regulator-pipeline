@@ -15,7 +15,13 @@ from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from telco_generator.config import GeneratorConfig
 from telco_generator.orchestrator import run_generator
-from telco_generator.pipeline_runtime import classify_period_status
+from telco_generator.pipeline_runtime import (
+    build_generation_decision,
+    classify_period_status,
+    collect_validation_snapshot,
+    persist_run_metrics,
+    resolve_generation_parameters,
+)
 from telco_generator.uploaders.minio_client import MinioConfig
 from telco_generator.uploaders.minio_uploader import upload_all
 from telco_generator.utils.time import parse_reporting_period
@@ -30,12 +36,6 @@ def _period_from_logical_date(logical_date: Any) -> str:
     """Return the reporting period that closed before this DAG run date."""
     previous_month = logical_date.subtract(months=1)
     return previous_month.format("YYYY-MM")
-
-
-def _seed_for_period(period: str) -> int:
-    """Deterministic default seed: 2025-03 -> 202503."""
-    return int(period.replace("-", ""))
-
 
 def _minio_config_from_connection() -> MinioConfig:
     """Resolve MinIO settings from the Airflow telco_minio connection."""
@@ -119,24 +119,20 @@ def monthly_reporting_pipeline_dag() -> None:
 
     @task
     def generate_month(period: str, period_status: dict[str, Any]) -> dict[str, Any]:
-        status = period_status["status"]
-        if status == "loaded":
-            return {
-                "period": period,
-                "generated": False,
-                "reason": "period already fully loaded in bronze",
-            }
-        if status == "partial":
-            raise AirflowException(
-                f"Refusing to auto-generate {period}: bronze already has partial data "
-                f"for domains {period_status['loaded_domains']}. Clean up or handle manually."
+        try:
+            decision = build_generation_decision(
+                period=period,
+                status=str(period_status["status"]),
+                loaded_domains=[str(item) for item in period_status.get("loaded_domains", [])],
             )
+        except ValueError as exc:
+            raise AirflowException(str(exc)) from exc
+        if not decision["generated"]:
+            return decision
 
         context = get_current_context()
         params = context.get("params", {})
-        anomaly_rate = float(params.get("anomaly_rate") or 0.0)
-        seed_param = params.get("seed")
-        seed = int(seed_param) if seed_param is not None else _seed_for_period(period)
+        anomaly_rate, seed = resolve_generation_parameters(period=period, params=params)
 
         output_dir = OUTPUT_BASE_DIR / period
         shutil.rmtree(output_dir, ignore_errors=True)
@@ -200,152 +196,13 @@ def monthly_reporting_pipeline_dag() -> None:
     @task
     def run_silver_validations(period: str) -> dict[str, Any]:
         hook = PostgresHook(postgres_conn_id=WAREHOUSE_CONN_ID)
-        validation_started_at = datetime.now(UTC)
-
-        min_loaded_at_rows = hook.get_records(
-            """
-            SELECT MIN(loaded_at) FROM (
-                SELECT MIN(_loaded_at) AS loaded_at FROM bronze.subscribers WHERE report_period = %s
-                UNION ALL
-                SELECT MIN(_loaded_at) FROM bronze.traffic_voice WHERE report_period = %s
-                UNION ALL
-                SELECT MIN(_loaded_at) FROM bronze.traffic_sms WHERE report_period = %s
-                UNION ALL
-                SELECT MIN(_loaded_at) FROM bronze.traffic_internet WHERE report_period = %s
-                UNION ALL
-                SELECT MIN(_loaded_at) FROM bronze.qos WHERE report_period = %s
-                UNION ALL
-                SELECT MIN(_loaded_at) FROM bronze.revenue WHERE report_period = %s
-            ) t
-            """,
-            parameters=(period, period, period, period, period, period),
+        snapshot = collect_validation_snapshot(
+            hook=hook,
+            period=period,
+            validation_started_at=datetime.now(UTC),
         )
-        loaded_after = min_loaded_at_rows[0][0] if min_loaded_at_rows else None
-
-        rows = hook.get_records(
-            "SELECT * FROM silver.run_all_validations(%s, %s);",
-            parameters=(None, loaded_after),
-        )
-        event_rows = hook.get_records(
-            "SELECT silver.capture_suspicious_anomaly_events(%s, %s);",
-            parameters=(None, loaded_after),
-        )
-        event_count = int(event_rows[0][0]) if event_rows else 0
-
-        bronze_rows = hook.get_records(
-            """
-            SELECT domain, row_count FROM (
-                SELECT 'subscribers' AS domain, COUNT(*)::BIGINT AS row_count
-                FROM bronze.subscribers
-                WHERE report_period = %s
-                UNION ALL
-                SELECT 'traffic_voice', COUNT(*)::BIGINT
-                FROM bronze.traffic_voice
-                WHERE report_period = %s
-                UNION ALL
-                SELECT 'traffic_sms', COUNT(*)::BIGINT
-                FROM bronze.traffic_sms
-                WHERE report_period = %s
-                UNION ALL
-                SELECT 'traffic_internet', COUNT(*)::BIGINT
-                FROM bronze.traffic_internet
-                WHERE report_period = %s
-                UNION ALL
-                SELECT 'qos', COUNT(*)::BIGINT
-                FROM bronze.qos
-                WHERE report_period = %s
-                UNION ALL
-                SELECT 'revenue', COUNT(*)::BIGINT
-                FROM bronze.revenue
-                WHERE report_period = %s
-            ) t
-            ORDER BY domain
-            """,
-            parameters=(period, period, period, period, period, period),
-        )
-
-        rejection_rows = hook.get_records(
-            """
-            SELECT domain, rejected_count FROM (
-                SELECT 'subscribers' AS domain, COUNT(*)::BIGINT AS rejected_count
-                FROM silver.subscribers_rejections r
-                JOIN bronze.subscribers b ON b.bronze_id = r.bronze_id
-                WHERE b.report_period = %s
-                UNION ALL
-                SELECT 'traffic_voice', COUNT(*)::BIGINT
-                FROM silver.traffic_voice_rejections r
-                JOIN bronze.traffic_voice b ON b.bronze_id = r.bronze_id
-                WHERE b.report_period = %s
-                UNION ALL
-                SELECT 'traffic_sms', COUNT(*)::BIGINT
-                FROM silver.traffic_sms_rejections r
-                JOIN bronze.traffic_sms b ON b.bronze_id = r.bronze_id
-                WHERE b.report_period = %s
-                UNION ALL
-                SELECT 'traffic_internet', COUNT(*)::BIGINT
-                FROM silver.traffic_internet_rejections r
-                JOIN bronze.traffic_internet b ON b.bronze_id = r.bronze_id
-                WHERE b.report_period = %s
-                UNION ALL
-                SELECT 'qos', COUNT(*)::BIGINT
-                FROM silver.qos_rejections r
-                JOIN bronze.qos b ON b.bronze_id = r.bronze_id
-                WHERE b.report_period = %s
-                UNION ALL
-                SELECT 'revenue', COUNT(*)::BIGINT
-                FROM silver.revenue_rejections r
-                JOIN bronze.revenue b ON b.bronze_id = r.bronze_id
-                WHERE b.report_period = %s
-            ) t
-            ORDER BY domain
-            """,
-            parameters=(period, period, period, period, period, period),
-        )
-
-        alerts = hook.get_records(
-            (
-                "SELECT alert_code, severity, domain, report_period, "
-                "event_count, threshold_value "
-                "FROM silver.evaluate_quality_alerts(%s);"
-            ),
-            parameters=(period,),
-        )
-
-        return {
-            "period": period,
-            "validation_window_start": loaded_after.isoformat() if loaded_after else None,
-            "validation_started_at": validation_started_at.isoformat(),
-            "validation_results": [
-                {
-                    "domain": domain,
-                    "rows_processed": int(rows_processed),
-                    "rows_validated": int(rows_validated),
-                    "rows_rejected": int(rows_rejected),
-                }
-                for domain, rows_processed, rows_validated, rows_rejected in rows
-            ],
-            "events_captured": event_count,
-            "bronze_rows_by_domain": {domain: int(count) for domain, count in bronze_rows},
-            "rejections_by_domain": {domain: int(count) for domain, count in rejection_rows},
-            "alerts": [
-                {
-                    "alert_code": alert_code,
-                    "severity": severity,
-                    "domain": domain,
-                    "report_period": report_period,
-                    "event_count": int(event_count),
-                    "threshold_value": int(threshold_value),
-                }
-                for (
-                    alert_code,
-                    severity,
-                    domain,
-                    report_period,
-                    event_count,
-                    threshold_value,
-                ) in alerts
-            ],
-        }
+        persist_run_metrics(hook=hook, snapshot=snapshot)
+        return snapshot
 
     period = resolve_reporting_period()
     period_status = inspect_period(period)
