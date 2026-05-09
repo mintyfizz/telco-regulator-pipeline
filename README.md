@@ -334,11 +334,17 @@ docker exec telco_airflow_scheduler airflow dags trigger monthly_reporting_pipel
 Stabilization and operations docs:
 
 - `docs/STABILIZATION_CHECKPOINT.md`
+- `docs/RELEASE_v0.9.1_STABILIZATION.md`
 - `docs/CONFIGURATION_CONTRACT.md`
 - `docs/PRODUCTION_PROFILE.md`
 - `docs/OPERATIONS_RUNBOOK.md`
 - `docs/METABASE_DASHBOARD_PLAN.md`
 - `docs/ALERT_POLICY.md`
+- `docs/PRODUCTION_RELEASE_RUNBOOK.md`
+
+PR process gate template:
+
+- `.github/pull_request_template.md`
 
 ## Repository Layout
 

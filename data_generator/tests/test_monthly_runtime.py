@@ -32,6 +32,15 @@ def test_build_generation_decision_partial_raises() -> None:
         raise AssertionError("Expected ValueError")
 
 
+def test_build_generation_decision_empty_generates() -> None:
+    decision = build_generation_decision(
+        period="2025-03",
+        status="empty",
+        loaded_domains=[],
+    )
+    assert decision == {"period": "2025-03", "generated": True}
+
+
 def test_resolve_generation_parameters_defaults_seed_to_period() -> None:
     anomaly_rate, seed = resolve_generation_parameters(period="2025-03", params={})
     assert anomaly_rate == 0.0
@@ -61,6 +70,27 @@ class _FakeRecordsHook:
         return self.responses.pop(0)
 
 
+class _FakeNoSliceRecordsHook:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[object, ...] | None]] = []
+        self.responses = [
+            [(None,)],
+            [("subscribers", 0, 0, 0), ("qos", 0, 0, 0)],
+            [(0,)],
+            [("subscribers", 0), ("qos", 0)],
+            [("subscribers", 0), ("qos", 0)],
+            [],
+        ]
+
+    def get_records(
+        self,
+        sql: str,
+        parameters: tuple[object, ...] | None = None,
+    ) -> list[tuple[object, ...]]:
+        self.calls.append((sql, parameters))
+        return self.responses.pop(0)
+
+
 def test_collect_validation_snapshot_uses_incremental_window_and_alert_eval() -> None:
     hook = _FakeRecordsHook()
     snapshot = collect_validation_snapshot(
@@ -77,6 +107,22 @@ def test_collect_validation_snapshot_uses_incremental_window_and_alert_eval() ->
     assert "capture_suspicious_anomaly_events" in hook.calls[2][0]
     assert hook.calls[2][1] == (None, datetime(2025, 3, 1, 0, 0, tzinfo=UTC))
     assert "evaluate_quality_alerts" in hook.calls[5][0]
+    assert hook.calls[5][1] == ("2025-03",)
+
+
+def test_collect_validation_snapshot_allows_no_new_slice_window() -> None:
+    hook = _FakeNoSliceRecordsHook()
+    snapshot = collect_validation_snapshot(
+        hook=hook,
+        period="2025-03",
+        validation_started_at=datetime(2025, 4, 5, 3, 0, tzinfo=UTC),
+    )
+
+    assert snapshot["validation_window_start"] is None
+    assert snapshot["events_captured"] == 0
+    assert snapshot["alerts"] == []
+    assert hook.calls[1][1] == (None, None)
+    assert hook.calls[2][1] == (None, None)
     assert hook.calls[5][1] == ("2025-03",)
 
 

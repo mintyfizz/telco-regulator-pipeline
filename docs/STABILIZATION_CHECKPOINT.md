@@ -20,6 +20,9 @@ Every PR must satisfy all of the following before merge:
 
 If any criterion is red, no new feature scope starts until stability is restored.
 
+PRs must complete the gate checklist in `.github/pull_request_template.md`.
+Release checkpoint note: `docs/RELEASE_v0.9.1_STABILIZATION.md`.
+
 ## Definition of Done (Reliability-First)
 
 ### Data-generation changes
