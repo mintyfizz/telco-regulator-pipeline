@@ -17,11 +17,11 @@ This project models what a modern regulatory data platform can look like using a
 
 This project implements a regulator-side data platform for the Congolese telecommunications sector. ARPCE-style regulatory scope covers multiple operator segments; this implementation currently models three:
 
-| Segment | Operators in v1 | Calibration source |
-|---|---|---|
-| Mobile | OPA01, OPA02 | ARPCE 2024-style published mobile market reports |
-| Fixed voice | OPA03 | Synthetic estimate, not externally calibrated |
-| Fixed broadband | OPA03-OPA07 | Synthetic estimate, not externally calibrated |
+| Segment          | Operators in v1 | Calibration source                                    |
+|------------------|-----------------|-------------------------------------------------------|
+| Mobile           | OPA01, OPA02    | ARPCE 2024-style published mobile market reports      |
+| Fixed voice      | OPA03           | Synthetic estimate, not externally calibrated         |
+| Fixed broadband  | OPA03-OPA07     | Synthetic estimate, not externally calibrated         |
 
 The mobile segment is calibrated against published-style 2024 mobile telephony and mobile internet anchors. Generated subscriber counts, traffic volumes, and revenue figures are designed to stay close to those market totals.
 
@@ -65,33 +65,33 @@ Planned:
 
 The generator produces monthly CSV submissions across six regulatory domains:
 
-| Domain | Bronze table | Grain |
-|---|---|---|
-| Subscribers | `bronze.subscribers` | operator, period, department, service segment |
-| Voice traffic | `bronze.traffic_voice` | operator, period, department, service segment |
-| SMS traffic | `bronze.traffic_sms` | operator, period, department, mobile segment |
-| Internet traffic | `bronze.traffic_internet` | operator, period, department, service segment |
-| Quality of service | `bronze.qos` | operator, period, department, service segment |
-| Revenue | `bronze.revenue` | operator, period, service segment |
+| Domain           | Bronze table              | Grain                                          |
+|------------------|---------------------------|------------------------------------------------|
+| Subscribers      | `bronze.subscribers`      | operator, period, department, service segment  |
+| Voice traffic    | `bronze.traffic_voice`    | operator, period, department, service segment  |
+| SMS traffic      | `bronze.traffic_sms`      | operator, period, department, mobile segment   |
+| Internet traffic | `bronze.traffic_internet` | operator, period, department, service segment  |
+| Quality of service | `bronze.qos`            | operator, period, department, service segment  |
+| Revenue          | `bronze.revenue`          | operator, period, service segment              |
 
 Covered service segments:
 
-| Segment | Operators | Domains |
-|---|---:|---|
-| `mobile` | 2 | subscribers, voice, SMS, internet, QoS, revenue |
-| `fixed_voice` | 1 | subscribers, voice, QoS, revenue |
-| `fixed_broadband` | 5 | subscribers, internet, QoS, revenue |
+| Segment           | Operators | Domains                                          |
+|-------------------|----------:|--------------------------------------------------|
+| `mobile`          |         2 | subscribers, voice, SMS, internet, QoS, revenue  |
+| `fixed_voice`     |         1 | subscribers, voice, QoS, revenue                 |
+| `fixed_broadband` |         5 | subscribers, internet, QoS, revenue              |
 
 For a full 2020-2024 run, expected row counts are:
 
-| Domain | Rows |
-|---|---:|
-| `subscribers` | 19,800 |
-| `traffic_voice` | 2,700 |
-| `traffic_sms` | 1,800 |
-| `traffic_internet` | 6,300 |
-| `qos` | 7,200 |
-| `revenue` | 480 |
+| Domain            |   Rows |
+|-------------------|-------:|
+| `subscribers`     | 19,800 |
+| `traffic_voice`   |  2,700 |
+| `traffic_sms`     |  1,800 |
+| `traffic_internet`|  6,300 |
+| `qos`             |  7,200 |
+| `revenue`         |    480 |
 
 Late-2024 generated values are calibrated around these anchors:
 
@@ -134,12 +134,12 @@ flowchart TB
 
 The warehouse initializes four schemas:
 
-| Schema | Purpose |
-|---|---|
-| `bronze` | Raw submissions captured with audit metadata. |
-| `silver` | Curated reference data now; validated models later. |
-| `gold` | Future analytics-ready marts. |
-| `audit` | Pipeline run and file ingestion tracking. |
+| Schema    | Purpose                                              |
+|-----------|------------------------------------------------------|
+| `bronze`  | Raw submissions captured with audit metadata.        |
+| `silver`  | Curated reference data now; validated models later.  |
+| `gold`    | Future analytics-ready marts.                        |
+| `audit`   | Pipeline run and file ingestion tracking.            |
 
 The silver reference layer currently seeds:
 
@@ -177,12 +177,12 @@ docker compose up -d
 
 Available services:
 
-| Service | URL / Port | Credentials source |
-|---|---|---|
-| PostgreSQL | `localhost:5433` | `.env` (`POSTGRES_USER`, `TELCO_POSTGRES_PASSWORD`) |
-| MinIO API | `localhost:9000` | `.env` (`TELCO_MINIO_ROOT_USER`, `TELCO_MINIO_ROOT_PASSWORD`) |
-| MinIO Console | `http://localhost:9001` | `.env` (`TELCO_MINIO_ROOT_USER`, `TELCO_MINIO_ROOT_PASSWORD`) |
-| Airflow UI | `http://localhost:8080` | `.env` (`AIRFLOW_ADMIN_PASSWORD`) |
+| Service         | URL / Port              | Credentials source                                                |
+|-----------------|-------------------------|-------------------------------------------------------------------|
+| PostgreSQL      | `localhost:5433`        | `.env` (`POSTGRES_USER`, `TELCO_POSTGRES_PASSWORD`)               |
+| MinIO API       | `localhost:9000`        | `.env` (`TELCO_MINIO_ROOT_USER`, `TELCO_MINIO_ROOT_PASSWORD`)     |
+| MinIO Console   | `http://localhost:9001` | `.env` (`TELCO_MINIO_ROOT_USER`, `TELCO_MINIO_ROOT_PASSWORD`)     |
+| Airflow UI      | `http://localhost:8080` | `.env` (`AIRFLOW_ADMIN_PASSWORD`)                                 |
 
 Generate the full synthetic dataset:
 
@@ -363,17 +363,17 @@ uv.lock                  Locked Python dependency resolution
 
 ## Tech Stack
 
-| Layer | Technology | Status |
-|---|---|---|
-| Synthetic data | Python, NumPy, Pydantic, Click | Implemented |
-| Object storage | MinIO | Running locally |
-| Warehouse | PostgreSQL 16 | Bronze and silver implemented |
-| Orchestration | Apache Airflow | Bronze ingestion and monthly reporting implemented |
-| Validation | SQL silver validation, rejection tables, quality events | Implemented |
-| Transformation | dbt-core | Implemented (staging + marts scaffold) |
-| BI | Metabase | Planned |
-| Packaging | uv | Implemented |
-| Container runtime | Docker Compose | Implemented |
+| Layer             | Technology                                         | Status                                                    |
+|-------------------|----------------------------------------------------|-----------------------------------------------------------|
+| Synthetic data    | Python, NumPy, Pydantic, Click                     | Implemented                                               |
+| Object storage    | MinIO                                              | Running locally                                           |
+| Warehouse         | PostgreSQL 16                                      | Bronze and silver implemented                             |
+| Orchestration     | Apache Airflow                                     | Bronze ingestion and monthly reporting implemented        |
+| Validation        | SQL silver validation, rejection tables, quality events | Implemented                                          |
+| Transformation    | dbt-core                                           | Implemented (staging + marts scaffold)                    |
+| BI                | Metabase                                           | Planned                                                   |
+| Packaging         | uv                                                 | Implemented                                               |
+| Container runtime | Docker Compose                                     | Implemented                                               |
 
 ## Roadmap
 
