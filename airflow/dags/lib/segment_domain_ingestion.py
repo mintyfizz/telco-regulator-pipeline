@@ -462,10 +462,13 @@ def _parse_segment_key(key: str) -> dict[str, str]:
 
 def _read_csv(content: bytes, config: DomainConfig) -> list[dict[str, str]]:
     try:
-        return validate_csv_content(content=content, required_columns=config.required_columns)
+        return validate_csv_content(
+            content=content,
+            required_columns=config.required_columns,
+            label=f"{config.domain} CSV",
+        )
     except CsvValidationError as exc:
-        message = str(exc).replace("CSV", f"{config.domain} CSV", 1)
-        raise ValidationError(message) from exc
+        raise ValidationError(str(exc)) from exc
 
 
 def _build_insert_rows(

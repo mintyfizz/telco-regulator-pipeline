@@ -30,8 +30,7 @@ def _extract_scalar(rows: list[tuple[Any, ...]]) -> object | None:
     """Return first-column scalar from first row, or None when no rows exist."""
     if not rows:
         return None
-    first_row = rows[0]
-    return first_row[0] if first_row else None
+    return rows[0][0]
 
 
 def classify_period_status(

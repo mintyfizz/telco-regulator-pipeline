@@ -12,7 +12,7 @@
 
 ## Rotation Expectations
 
-- Rotate storage/database credentials at least quarterly.
+- Rotate storage/database credentials at least every 90 days.
 - Rotate Airflow admin credentials on staff/role changes.
 - Rotate Fernet key only with a planned encrypted-secret migration window.
 - Record credential issue/rotation date in platform ops logs.

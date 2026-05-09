@@ -273,7 +273,11 @@ def _parse_subscriber_key(key: str) -> dict[str, str]:
 
 def _read_csv(content: bytes) -> list[dict[str, str]]:
     try:
-        return validate_csv_content(content=content, required_columns=REQUIRED_COLUMNS)
+        return validate_csv_content(
+            content=content,
+            required_columns=REQUIRED_COLUMNS,
+            label="subscribers CSV",
+        )
     except CsvValidationError as exc:
         raise ValidationError(str(exc)) from exc
 

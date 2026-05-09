@@ -11,25 +11,26 @@ class CsvValidationError(ValueError):
 def validate_csv_content(
     content: bytes,
     required_columns: set[str],
+    label: str = "CSV",
 ) -> list[dict[str, str]]:
     """Decode bytes and validate required columns, row shape, and row presence."""
     text = content.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text))
 
     if not reader.fieldnames:
-        raise CsvValidationError("CSV has no header row")
+        raise CsvValidationError(f"{label} has no header row")
 
     missing = required_columns - set(reader.fieldnames)
     if missing:
-        raise CsvValidationError(f"CSV is missing required columns: {sorted(missing)}")
+        raise CsvValidationError(f"{label} is missing required columns: {sorted(missing)}")
 
     rows: list[dict[str, str]] = []
     for row_number, row in enumerate(reader, start=2):
         if None in row:
-            raise CsvValidationError(f"CSV row {row_number} has extra fields")
+            raise CsvValidationError(f"{label} row {row_number} has extra fields")
         rows.append(row)
 
     if not rows:
-        raise CsvValidationError("CSV has no data rows")
+        raise CsvValidationError(f"{label} has no data rows")
 
     return rows
