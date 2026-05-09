@@ -1,11 +1,11 @@
 """
-Market trajectory parameters extracted from ARPCE 2020-2024 reports.
+Market trajectory parameters extracted from regulatory market reports (2020-2024).
 
 These shape how metrics evolve year-over-year. The generator interpolates
 monthly between annual anchor points and adds noise for realism.
 """
 
-# National anchor values, year-end. Source: ARPCE annual market reports.
+# National anchor values, year-end. Source: regulatory annual market reports.
 
 MOBILE_TELEPHONY_SUBSCRIBERS_NATIONAL = {
     2020: 5_618_000,

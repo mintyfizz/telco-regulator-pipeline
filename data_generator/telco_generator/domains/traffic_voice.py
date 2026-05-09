@@ -3,7 +3,7 @@ Voice traffic domain generator.
 
 Produces bronze.traffic_voice rows per (operator, period, region).
 
-Calibrated against ARPCE 2024 anchors:
+Calibrated against 2024 regulatory anchors:
 - 6.102 billion outgoing minutes nationally
 - 86.2% on-net, 13.6% off-net, 0.2% international outgoing
 - 846 million incoming minutes (98% national, 2% international)
@@ -31,7 +31,7 @@ from telco_generator.utils.time import ReportingPeriod
 
 logger = get_logger(__name__)
 
-# Destination shares from ARPCE 2024 report.
+# Destination shares from 2024 regulatory report.
 ONNET_SHARE = 0.862
 OFFNET_SHARE = 0.136
 INTERNATIONAL_OUTGOING_SHARE = 0.002

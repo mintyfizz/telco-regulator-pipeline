@@ -3,7 +3,7 @@ Congolese department reference data calibrated against the 2023 census reform.
 
 Population shares drive geographic distribution of subscribers, traffic, and
 QoS measurements. The North/South zone classification captures the historical
-digital divide central to ARPCE policy concerns.
+digital divide central to regulatory policy concerns.
 """
 
 from dataclasses import dataclass

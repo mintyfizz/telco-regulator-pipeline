@@ -5,7 +5,7 @@
 -- Internet traffic doesn't have on-net/off-net concept. Mobile data is broken
 -- out by network generation. Fixed broadband is broken out by access technology.
 --
--- Unit is megabytes (MB) to match ARPCE reporting convention. 1 GB = 1024 MB.
+-- Unit is megabytes (MB) to match the standard regulatory reporting convention. 1 GB = 1024 MB.
 -- 4G dominates: 75% of Congo's mobile internet traffic in 2024 (and growing).
 -- 2G is being phased out: only 0.3% of traffic in 2024.
 -- ============================================================================

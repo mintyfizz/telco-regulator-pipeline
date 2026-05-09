@@ -3,7 +3,7 @@ SMS traffic domain generator.
 
 Produces bronze.traffic_sms rows per (operator, period, region).
 
-Calibrated against ARPCE 2024 anchors:
+Calibrated against 2024 regulatory anchors:
 - 4.643 billion outgoing SMS nationally (declining 15.7% YoY)
 - 98.81% on-net, 1.18% off-net, 0.01% international
 - 54 million incoming SMS (national interconnection only)
@@ -29,7 +29,7 @@ from telco_generator.utils.time import ReportingPeriod
 
 logger = get_logger(__name__)
 
-# Destination shares from ARPCE 2024 report.
+# Destination shares from 2024 regulatory report.
 SMS_ONNET_SHARE = 0.9881
 SMS_OFFNET_SHARE = 0.0118
 SMS_INTERNATIONAL_OUTGOING_SHARE = 0.0001

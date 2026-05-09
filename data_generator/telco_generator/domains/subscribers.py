@@ -4,7 +4,7 @@ Subscribers domain generator.
 Produces bronze.subscribers rows per (operator, period, region, service_category,
 payment_type, technology_generation) combination.
 
-Calibrated against ARPCE 2024 anchors:
+Calibrated against 2024 regulatory anchors:
 - 6.050M mobile telephony subscribers nationally
 - 3.757M mobile internet subscribers nationally
 - 99% prepaid share

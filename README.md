@@ -15,11 +15,11 @@ This project models what a modern regulatory data platform can look like using a
 
 ## Scope and Calibration
 
-This project implements a regulator-side data platform for the Congolese telecommunications sector. ARPCE-style regulatory scope covers multiple operator segments; this implementation currently models three:
+This project implements a regulator-side data platform for the Congolese telecommunications sector. Regulatory scope covers multiple operator segments; this implementation currently models three:
 
 | Segment          | Operators in v1 | Calibration source                                    |
 |------------------|-----------------|-------------------------------------------------------|
-| Mobile           | OPA01, OPA02    | ARPCE 2024-style published mobile market reports      |
+| Mobile           | OPA01, OPA02    | Published mobile market reports (2024)                |
 | Fixed voice      | OPA03           | Synthetic estimate, not externally calibrated         |
 | Fixed broadband  | OPA03-OPA07     | Synthetic estimate, not externally calibrated         |
 
@@ -31,7 +31,7 @@ This asymmetry is intentional: the architecture supports multi-segment regulatio
 
 ### Segment Roadmap
 
-- [x] Mobile - calibrated to ARPCE-style 2024 mobile market anchors
+- [x] Mobile - calibrated to regulatory 2024 mobile market anchors
 - [x] Fixed voice and fixed broadband - synthetic, architecturally complete
 - [ ] Calibrate fixed segments against ITU or World Bank ICT indicators
 - [ ] Postal segment

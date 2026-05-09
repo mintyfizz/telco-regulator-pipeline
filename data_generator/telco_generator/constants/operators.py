@@ -1,5 +1,5 @@
 """
-Operator profiles calibrated against ARPCE 2024 market reports.
+Operator profiles calibrated against publicly available 2024 market reports.
 
 Market share weights drive subscriber/traffic/revenue distribution.
 Trajectory parameters shape 5-year evolution.
@@ -40,10 +40,10 @@ class OperatorProfile:
     qos_quality_factor: float  # 1.0 = average reliability, lower = worse
 
 
-# Calibrated to ARPCE 2024 reports.
+# Calibrated to publicly available 2024 market reports.
 # National mobile totals remain 6.050M mobile telephony subscribers and 3.757M
 # mobile internet subscribers. Fixed and ISP subscriber counts are synthetic
-# local-market anchors because public ARPCE reports used for calibration focus
+# local-market anchors because public market reports used for calibration focus
 # on mobile. They are intentionally smaller and concentrated in urban regions.
 OPERATORS: dict[str, OperatorProfile] = {
     "OPA01": OperatorProfile(

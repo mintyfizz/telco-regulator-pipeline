@@ -2,7 +2,7 @@
 -- 08_bronze_revenue.sql
 -- Raw revenue submissions broken out by service line and direction.
 --
--- The component breakdown follows ARPCE-style reporting taxonomy. Voice and
+-- The component breakdown follows the standard regulatory reporting taxonomy. Voice and
 -- SMS revenues split outgoing (subscriber pays) from incoming (interconnection
 -- termination). Mobile internet revenue splits by technology generation.
 -- Fixed voice and fixed broadband have their own segment-specific revenue

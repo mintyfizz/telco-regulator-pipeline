@@ -3,7 +3,7 @@ Internet traffic domain generator.
 
 Produces bronze.traffic_internet rows per (operator, period, region).
 
-Calibrated against ARPCE 2024 anchors:
+Calibrated against 2024 regulatory anchors:
 - 90.904 billion MB total nationally
 - 75.2% 4G, 24.4% 3G, 0.3% 2G
 - Largest two fictional operators dominate mobile internet traffic.

@@ -67,7 +67,7 @@ COMMENT ON TABLE silver.regions IS
 'Reference data for the 15 administrative departments of Congo (post-2023 reform). Population from 2023 census, ~6.14 million total.';
 
 COMMENT ON COLUMN silver.regions.zone IS
-'Geographic zone — proxy for the historical North/South digital divide central to ARPCE policy.';
+'Geographic zone — proxy for the historical North/South digital divide central to regulatory policy.';
 
 INSERT INTO silver.regions (
     region_code,

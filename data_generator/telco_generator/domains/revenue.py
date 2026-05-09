@@ -2,9 +2,9 @@
 Revenue domain generator.
 
 Produces bronze.revenue rows per (operator, period). Note: revenue is reported
-nationally per operator, not regionally — matching how operators report to ARPCE.
+nationally per operator, not regionally — matching how operators report to the regulator.
 
-Calibrated against ARPCE 2024 anchors:
+Calibrated against 2024 regulatory anchors:
 - Total mobile internet revenue: 63.569B FCFA
 - Total mobile telephony revenue: 128.891B FCFA (combined voice + SMS)
 - 14 distinct revenue lines summing to total
@@ -37,7 +37,7 @@ from telco_generator.utils.time import ReportingPeriod
 
 logger = get_logger(__name__)
 
-# Revenue split ratios (calibrated to ARPCE 2024 telephony report).
+# Revenue split ratios (calibrated to 2024 regulatory telephony report).
 VOICE_OUTGOING_ONNET_RATIO = 0.708
 VOICE_OUTGOING_OFFNET_RATIO = 0.138
 VOICE_OUTGOING_INTL_RATIO = 0.020
