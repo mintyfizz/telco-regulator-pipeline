@@ -18,6 +18,7 @@ from typing import Any
 
 from airflow.exceptions import AirflowException
 from psycopg2.extras import Json
+from telco_generator.ingestion_paths import PathValidationError, parse_subscriber_key
 
 from lib.audit import (
     finalized_files_for_bucket,
@@ -25,6 +26,7 @@ from lib.audit import (
     record_file_ingestion,
     start_pipeline_run,
 )
+from lib.constants import ALLOWED_SERVICE_SEGMENTS
 from lib.minio_helpers import (
     copy_object,
     delete_object,
@@ -32,7 +34,6 @@ from lib.minio_helpers import (
     get_object_size,
     list_objects,
 )
-from lib.constants import ALLOWED_SERVICE_SEGMENTS
 from lib.postgres_helpers import get_warehouse_connection, insert_rows
 
 LANDING_BUCKET = "landing"
@@ -256,30 +257,18 @@ def finish_subscribers_run(run_id: str, results: list[dict[str, Any]] | None) ->
 
 
 def _parse_subscriber_key(key: str) -> dict[str, str]:
-    parts = key.split("/")
-    if len(parts) != 6:
-        raise ValidationError(
-            "Expected key format: mobile/<operator>/subscribers/<year>/<month>/<file>.csv"
-        )
-
-    service_segment, operator_id, domain, year, month, filename = parts
-    if domain != DOMAIN:
-        raise ValidationError(f"Expected domain '{DOMAIN}', got '{domain}'")
-    if service_segment not in ALLOWED_SERVICE_SEGMENTS:
-        raise ValidationError(
-            f"unsupported subscriber service_segment={service_segment}"
-        )
-    if not filename.endswith(".csv"):
-        raise ValidationError("Object is not a CSV file")
-
+    try:
+        parsed = parse_subscriber_key(key, allowed_service_segments=ALLOWED_SERVICE_SEGMENTS)
+    except PathValidationError as exc:
+        raise ValidationError(str(exc)) from exc
     return {
-        "service_segment": service_segment,
-        "operator_id": operator_id,
-        "domain": domain,
-        "year": year,
-        "month": month,
-        "report_period": f"{year}-{month}",
-        "filename": filename,
+        "service_segment": parsed.service_segment,
+        "operator_id": parsed.operator_id,
+        "domain": parsed.domain,
+        "year": parsed.year,
+        "month": parsed.month,
+        "report_period": parsed.report_period,
+        "filename": parsed.filename,
     }
 
 

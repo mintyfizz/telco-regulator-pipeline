@@ -3,26 +3,26 @@
 from __future__ import annotations
 
 import shutil
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from airflow.decorators import dag, task
 from airflow.exceptions import AirflowException, AirflowSkipException
+from airflow.hooks.base import BaseHook
 from airflow.operators.python import get_current_context
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from telco_generator.config import GeneratorConfig
 from telco_generator.orchestrator import run_generator
+from telco_generator.pipeline_runtime import classify_period_status
 from telco_generator.uploaders.minio_client import MinioConfig
 from telco_generator.uploaders.minio_uploader import upload_all
 from telco_generator.utils.time import parse_reporting_period
 
 DAG_ID = "monthly_reporting_pipeline"
 WAREHOUSE_CONN_ID = "telco_warehouse"
-MINIO_ENDPOINT = "http://minio:9000"
-MINIO_ACCESS_KEY = "minio_admin"
-MINIO_SECRET_KEY = "changeme_local_only"
+MINIO_CONN_ID = "telco_minio"
 OUTPUT_BASE_DIR = Path("/tmp/telco_monthly_reporting")
 
 
@@ -35,6 +35,18 @@ def _period_from_logical_date(logical_date: Any) -> str:
 def _seed_for_period(period: str) -> int:
     """Deterministic default seed: 2025-03 -> 202503."""
     return int(period.replace("-", ""))
+
+
+def _minio_config_from_connection() -> MinioConfig:
+    """Resolve MinIO settings from the Airflow telco_minio connection."""
+    conn = BaseHook.get_connection(MINIO_CONN_ID)
+    extra = conn.extra_dejson
+    return MinioConfig(
+        endpoint_url=str(extra.get("endpoint_url") or "http://minio:9000"),
+        access_key=conn.login,
+        secret_key=conn.password,
+        region_name=str(extra.get("region_name") or "us-east-1"),
+    )
 
 
 @dag(
@@ -71,41 +83,32 @@ def monthly_reporting_pipeline_dag() -> None:
     @task
     def inspect_period(period: str) -> dict[str, Any]:
         sql = """
-            SELECT 'subscribers' AS domain, COUNT(*)
-            FROM bronze.subscribers
-            WHERE report_period = %s
-            UNION ALL
-            SELECT 'traffic_voice', COUNT(*)
-            FROM bronze.traffic_voice
-            WHERE report_period = %s
-            UNION ALL
-            SELECT 'traffic_sms', COUNT(*)
-            FROM bronze.traffic_sms
-            WHERE report_period = %s
-            UNION ALL
-            SELECT 'traffic_internet', COUNT(*)
-            FROM bronze.traffic_internet
-            WHERE report_period = %s
-            UNION ALL
-            SELECT 'qos', COUNT(*)
-            FROM bronze.qos
-            WHERE report_period = %s
-            UNION ALL
-            SELECT 'revenue', COUNT(*)
-            FROM bronze.revenue
-            WHERE report_period = %s
+            SELECT domain, row_count FROM (
+                SELECT 'subscribers' AS domain, COUNT(*)::BIGINT AS row_count
+                FROM bronze.subscribers WHERE report_period = %s
+                UNION ALL
+                SELECT 'traffic_voice', COUNT(*)::BIGINT
+                FROM bronze.traffic_voice WHERE report_period = %s
+                UNION ALL
+                SELECT 'traffic_sms', COUNT(*)::BIGINT
+                FROM bronze.traffic_sms WHERE report_period = %s
+                UNION ALL
+                SELECT 'traffic_internet', COUNT(*)::BIGINT
+                FROM bronze.traffic_internet WHERE report_period = %s
+                UNION ALL
+                SELECT 'qos', COUNT(*)::BIGINT
+                FROM bronze.qos WHERE report_period = %s
+                UNION ALL
+                SELECT 'revenue', COUNT(*)::BIGINT
+                FROM bronze.revenue WHERE report_period = %s
+            ) t
+            ORDER BY domain
         """
         hook = PostgresHook(postgres_conn_id=WAREHOUSE_CONN_ID)
         rows = hook.get_records(sql, parameters=(period, period, period, period, period, period))
         counts = {domain: int(count) for domain, count in rows}
         loaded_domains = [domain for domain, count in counts.items() if count > 0]
-
-        if len(loaded_domains) == 6:
-            status = "loaded"
-        elif loaded_domains:
-            status = "partial"
-        else:
-            status = "empty"
+        status = classify_period_status(counts)
 
         return {
             "period": period,
@@ -167,11 +170,7 @@ def monthly_reporting_pipeline_dag() -> None:
 
         stats = upload_all(
             output_dir=Path(generation_result["output_dir"]),
-            minio_config=MinioConfig(
-                endpoint_url=MINIO_ENDPOINT,
-                access_key=MINIO_ACCESS_KEY,
-                secret_key=MINIO_SECRET_KEY,
-            ),
+            minio_config=_minio_config_from_connection(),
             skip_existing=True,
         )
 
@@ -199,24 +198,153 @@ def monthly_reporting_pipeline_dag() -> None:
         return upload_result
 
     @task
-    def run_silver_validations() -> dict[str, Any]:
+    def run_silver_validations(period: str) -> dict[str, Any]:
         hook = PostgresHook(postgres_conn_id=WAREHOUSE_CONN_ID)
-        rows = hook.get_records("SELECT * FROM silver.run_all_validations();")
+        started_at = datetime.now(UTC)
+
+        min_loaded_at_rows = hook.get_records(
+            """
+            SELECT MIN(loaded_at) FROM (
+                SELECT MIN(_loaded_at) AS loaded_at FROM bronze.subscribers WHERE report_period = %s
+                UNION ALL
+                SELECT MIN(_loaded_at) FROM bronze.traffic_voice WHERE report_period = %s
+                UNION ALL
+                SELECT MIN(_loaded_at) FROM bronze.traffic_sms WHERE report_period = %s
+                UNION ALL
+                SELECT MIN(_loaded_at) FROM bronze.traffic_internet WHERE report_period = %s
+                UNION ALL
+                SELECT MIN(_loaded_at) FROM bronze.qos WHERE report_period = %s
+                UNION ALL
+                SELECT MIN(_loaded_at) FROM bronze.revenue WHERE report_period = %s
+            ) t
+            """,
+            parameters=(period, period, period, period, period, period),
+        )
+        loaded_after = min_loaded_at_rows[0][0] if min_loaded_at_rows else None
+
+        rows = hook.get_records(
+            "SELECT * FROM silver.run_all_validations(%s, %s);",
+            parameters=(None, loaded_after),
+        )
         event_rows = hook.get_records(
-            "SELECT silver.capture_suspicious_anomaly_events();"
+            "SELECT silver.capture_suspicious_anomaly_events(%s, %s);",
+            parameters=(None, loaded_after),
         )
         event_count = int(event_rows[0][0]) if event_rows else 0
+
+        bronze_rows = hook.get_records(
+            """
+            SELECT domain, row_count FROM (
+                SELECT 'subscribers' AS domain, COUNT(*)::BIGINT AS row_count
+                FROM bronze.subscribers
+                WHERE report_period = %s
+                UNION ALL
+                SELECT 'traffic_voice', COUNT(*)::BIGINT
+                FROM bronze.traffic_voice
+                WHERE report_period = %s
+                UNION ALL
+                SELECT 'traffic_sms', COUNT(*)::BIGINT
+                FROM bronze.traffic_sms
+                WHERE report_period = %s
+                UNION ALL
+                SELECT 'traffic_internet', COUNT(*)::BIGINT
+                FROM bronze.traffic_internet
+                WHERE report_period = %s
+                UNION ALL
+                SELECT 'qos', COUNT(*)::BIGINT
+                FROM bronze.qos
+                WHERE report_period = %s
+                UNION ALL
+                SELECT 'revenue', COUNT(*)::BIGINT
+                FROM bronze.revenue
+                WHERE report_period = %s
+            ) t
+            ORDER BY domain
+            """,
+            parameters=(period, period, period, period, period, period),
+        )
+
+        rejection_rows = hook.get_records(
+            """
+            SELECT domain, rejected_count FROM (
+                SELECT 'subscribers' AS domain, COUNT(*)::BIGINT AS rejected_count
+                FROM silver.subscribers_rejections r
+                JOIN bronze.subscribers b ON b.bronze_id = r.bronze_id
+                WHERE b.report_period = %s
+                UNION ALL
+                SELECT 'traffic_voice', COUNT(*)::BIGINT
+                FROM silver.traffic_voice_rejections r
+                JOIN bronze.traffic_voice b ON b.bronze_id = r.bronze_id
+                WHERE b.report_period = %s
+                UNION ALL
+                SELECT 'traffic_sms', COUNT(*)::BIGINT
+                FROM silver.traffic_sms_rejections r
+                JOIN bronze.traffic_sms b ON b.bronze_id = r.bronze_id
+                WHERE b.report_period = %s
+                UNION ALL
+                SELECT 'traffic_internet', COUNT(*)::BIGINT
+                FROM silver.traffic_internet_rejections r
+                JOIN bronze.traffic_internet b ON b.bronze_id = r.bronze_id
+                WHERE b.report_period = %s
+                UNION ALL
+                SELECT 'qos', COUNT(*)::BIGINT
+                FROM silver.qos_rejections r
+                JOIN bronze.qos b ON b.bronze_id = r.bronze_id
+                WHERE b.report_period = %s
+                UNION ALL
+                SELECT 'revenue', COUNT(*)::BIGINT
+                FROM silver.revenue_rejections r
+                JOIN bronze.revenue b ON b.bronze_id = r.bronze_id
+                WHERE b.report_period = %s
+            ) t
+            ORDER BY domain
+            """,
+            parameters=(period, period, period, period, period, period),
+        )
+
+        alerts = hook.get_records(
+            (
+                "SELECT alert_code, severity, domain, report_period, "
+                "event_count, threshold_value "
+                "FROM silver.evaluate_quality_alerts(%s);"
+            ),
+            parameters=(period,),
+        )
+
         return {
+            "period": period,
+            "validation_window_start": loaded_after.isoformat() if loaded_after else None,
+            "validation_started_at": started_at.isoformat(),
             "validation_results": [
-            {
-                "domain": domain,
-                "rows_processed": int(rows_processed),
-                "rows_validated": int(rows_validated),
-                "rows_rejected": int(rows_rejected),
-            }
-            for domain, rows_processed, rows_validated, rows_rejected in rows
+                {
+                    "domain": domain,
+                    "rows_processed": int(rows_processed),
+                    "rows_validated": int(rows_validated),
+                    "rows_rejected": int(rows_rejected),
+                }
+                for domain, rows_processed, rows_validated, rows_rejected in rows
             ],
             "events_captured": event_count,
+            "bronze_rows_by_domain": {domain: int(count) for domain, count in bronze_rows},
+            "rejections_by_domain": {domain: int(count) for domain, count in rejection_rows},
+            "alerts": [
+                {
+                    "alert_code": alert_code,
+                    "severity": severity,
+                    "domain": domain,
+                    "report_period": report_period,
+                    "event_count": int(event_count),
+                    "threshold_value": int(threshold_value),
+                }
+                for (
+                    alert_code,
+                    severity,
+                    domain,
+                    report_period,
+                    event_count,
+                    threshold_value,
+                ) in alerts
+            ],
         }
 
     period = resolve_reporting_period()
@@ -255,7 +383,7 @@ def monthly_reporting_pipeline_dag() -> None:
         failed_states=["failed"],
     )
 
-    silver_results = run_silver_validations()
+    silver_results = run_silver_validations(period)
 
     ready_for_ingestion >> run_subscribers_ingestion >> run_segment_ingestion >> silver_results
 

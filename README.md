@@ -55,12 +55,11 @@ Implemented now:
 
 Next:
 
-- dbt models for silver/gold transformations and dashboard marts.
+- Metabase dashboards for sector observatory analytics.
 
 Planned:
 
-- Alert notifications for severe data quality events.
-- Metabase dashboards for sector observatory analytics.
+- Alert notification delivery integrations (email/webhook/incident tooling).
 
 ## What It Generates
 
@@ -222,6 +221,8 @@ Generated output is ignored by git. Keep the generator code, not generated data,
 Upload generated files to MinIO:
 
 ```bash
+export TELCO_MINIO_ACCESS_KEY=minio_admin
+export TELCO_MINIO_SECRET_KEY=changeme_local_only
 uv run telco-generate upload --output-dir output/
 ```
 
@@ -303,10 +304,16 @@ docker compose down -v
 uv run telco-generate generate --start-year 2020 --end-year 2024 --output-dir output
 
 # Upload generated data to MinIO landing
+export TELCO_MINIO_ACCESS_KEY=minio_admin
+export TELCO_MINIO_SECRET_KEY=changeme_local_only
 uv run telco-generate upload --output-dir output/
 
 # Verify MinIO object counts
 uv run telco-generate verify
+
+# Quality gate checks used in CI
+make lint
+make test
 
 # Check Airflow DAG import errors
 docker exec telco_airflow_scheduler airflow dags list-import-errors
@@ -320,7 +327,7 @@ docker exec telco_airflow_scheduler airflow dags trigger monthly_reporting_pipel
 ```text
 airflow/                 Airflow DAGs and ingestion helper library
 data_generator/          Synthetic telecom submission generator
-dbt_project/             Future dbt models and tests
+dbt_project/             dbt staging/marts models and schema tests
 docs/                    Design notes, decisions, screenshots
 great_expectations/      Future data quality project
 infra/postgres/init/     PostgreSQL schema and seed SQL
@@ -339,7 +346,7 @@ uv.lock                  Locked Python dependency resolution
 | Warehouse | PostgreSQL 16 | Bronze and silver implemented |
 | Orchestration | Apache Airflow | Bronze ingestion and monthly reporting implemented |
 | Validation | SQL silver validation, rejection tables, quality events | Implemented |
-| Transformation | dbt-core | Planned |
+| Transformation | dbt-core | Implemented (staging + marts scaffold) |
 | BI | Metabase | Planned |
 | Packaging | uv | Implemented |
 | Container runtime | Docker Compose | Implemented |
@@ -354,7 +361,7 @@ uv.lock                  Locked Python dependency resolution
 - [x] v0.6 - Airflow batch ingestion DAGs
 - [x] v0.7 - Multi-segment silver validation and rejection tracking
 - [x] v0.8 - Monthly reporting DAG with catchup/backfill automation
-- [ ] v0.9 - dbt staging and marts models
+- [x] v0.9 - dbt staging and marts models
 - [ ] v1.0 - Metabase dashboards
 - [ ] v1.1 - Production-ready release with full documentation
 

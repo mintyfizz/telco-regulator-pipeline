@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: silver
+    schema: silver
+    tables:
+      - name: subscribers
+      - name: revenue
+      - name: qos
+      - name: data_quality_events
+      - name: operators
