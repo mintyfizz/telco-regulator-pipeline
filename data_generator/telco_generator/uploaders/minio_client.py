@@ -34,7 +34,10 @@ class MinioConfig:
         endpoint_url = os.getenv("TELCO_MINIO_ENDPOINT_URL", self.endpoint_url)
         region_name = os.getenv("TELCO_MINIO_REGION", self.region_name)
         if not access_key or not secret_key:
-            raise ValueError("MinIO credentials are required. Please configure authentication.")
+            raise ValueError(
+                "MinIO credentials are required. Set TELCO_MINIO_ACCESS_KEY and "
+                "TELCO_MINIO_SECRET_KEY (or pass access_key/secret_key explicitly)."
+            )
         return MinioConfig(
             endpoint_url=endpoint_url,
             access_key=access_key,

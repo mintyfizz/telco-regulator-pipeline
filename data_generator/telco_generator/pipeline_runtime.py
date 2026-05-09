@@ -70,10 +70,10 @@ def resolve_generation_parameters(period: str, params: dict[str, Any]) -> tuple[
 def collect_validation_snapshot(
     hook: RecordsHook,
     period: str,
-    validation_started_at: datetime | None = None,
+    validation_started_at: datetime,
 ) -> dict[str, Any]:
     """Run validation/event/alert queries and return run-level metrics."""
-    started_at = validation_started_at or datetime.now(UTC)
+    started_at = validation_started_at.astimezone(UTC)
 
     min_loaded_at_rows = hook.get_records(
         """
